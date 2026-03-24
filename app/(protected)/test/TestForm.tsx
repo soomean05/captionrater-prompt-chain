@@ -1,0 +1,168 @@
+"use client";
+
+import { useState } from "react";
+import { generateCaptionsAction } from "./actions";
+import type { HumorFlavor } from "@/lib/db/flavors";
+import type { HumorFlavorStep } from "@/lib/db/steps";
+
+function getContent(step: HumorFlavorStep | Record<string, unknown>): string {
+  const s = step as Record<string, unknown>;
+  return (
+    (s.content as string) ??
+    (s.prompt as string) ??
+    (s.text as string) ??
+    (s.instruction as string) ??
+    ""
+  );
+}
+
+const SAMPLE_IMAGE_URL =
+  "https://images.unsplash.com/photo-1518780664697-55e3ad937233?w=400";
+
+export function TestForm({ flavors }: { flavors: HumorFlavor[] }) {
+  const [pending, setPending] = useState(false);
+  const [result, setResult] = useState<Awaited<
+    ReturnType<typeof generateCaptionsAction>
+  > | null>(null);
+
+  async function handleSubmit(formData: FormData) {
+    setPending(true);
+    setResult(null);
+    const res = await generateCaptionsAction(formData);
+    setResult(res);
+    setPending(false);
+  }
+
+  return (
+    <div className="grid gap-8 lg:grid-cols-2">
+      <section>
+        <h2 className="mb-4 text-lg font-medium text-zinc-900 dark:text-zinc-100">
+          Generate captions
+        </h2>
+        <form action={handleSubmit} className="space-y-4">
+          <div>
+            <label
+              htmlFor="flavor_id"
+              className="mb-1 block text-sm font-medium text-zinc-700 dark:text-zinc-300"
+            >
+              Humor flavor
+            </label>
+            <select
+              id="flavor_id"
+              name="flavor_id"
+              required
+              className="w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm dark:border-zinc-600 dark:bg-zinc-800 dark:text-zinc-100"
+            >
+              <option value="">Select a flavor</option>
+              {flavors.map((f) => (
+                <option key={f.id} value={f.id}>
+                  {f.name ?? f.id}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <label
+              htmlFor="image_url"
+              className="mb-1 block text-sm font-medium text-zinc-700 dark:text-zinc-300"
+            >
+              Image URL
+            </label>
+            <input
+              id="image_url"
+              name="image_url"
+              type="url"
+              placeholder={SAMPLE_IMAGE_URL}
+              defaultValue={SAMPLE_IMAGE_URL}
+              required
+              className="w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm dark:border-zinc-600 dark:bg-zinc-800 dark:text-zinc-100"
+            />
+          </div>
+
+          <button
+            type="submit"
+            disabled={pending}
+            className="rounded-lg bg-zinc-900 px-4 py-2 text-sm font-medium text-white hover:bg-zinc-800 disabled:opacity-50 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-200"
+          >
+            {pending ? "Generating…" : "Generate captions"}
+          </button>
+        </form>
+      </section>
+
+      <section>
+        <h2 className="mb-4 text-lg font-medium text-zinc-900 dark:text-zinc-100">
+          Results
+        </h2>
+        {result === null && !pending ? (
+          <p className="rounded-xl border border-zinc-200 bg-white p-6 text-center text-zinc-500 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-400">
+            Submit the form to generate captions.
+          </p>
+        ) : result && "error" in result ? (
+          <div className="rounded-xl border border-red-200 bg-red-50 p-6 text-red-800 dark:border-red-800 dark:bg-red-900/30 dark:text-red-200">
+            {result.error}
+          </div>
+        ) : result && "captions" in result ? (
+          <div className="space-y-4">
+            {result.flavor ? (
+              <div>
+                <p className="text-sm font-medium text-zinc-700 dark:text-zinc-300">
+                  Flavor: {result.flavor.name ?? result.flavor.id}
+                </p>
+              </div>
+            ) : null}
+            {result.imageUrl ? (
+              <div>
+                <p className="mb-2 text-sm font-medium text-zinc-700 dark:text-zinc-300">
+                  Image preview
+                </p>
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={result.imageUrl}
+                  alt="Test image"
+                  className="max-h-48 rounded-lg border border-zinc-200 object-cover dark:border-zinc-700"
+                />
+              </div>
+            ) : null}
+            {result.steps?.length ? (
+              <div>
+                <p className="mb-2 text-sm font-medium text-zinc-700 dark:text-zinc-300">
+                  Steps used
+                </p>
+                <ol className="list-inside list-decimal space-y-1 text-sm text-zinc-600 dark:text-zinc-400">
+                  {result.steps.map((s, i) => (
+                    <li key={i} className="truncate">
+                      {getContent(s)}
+                    </li>
+                  ))}
+                </ol>
+              </div>
+            ) : null}
+            <div>
+              <p className="mb-2 text-sm font-medium text-zinc-700 dark:text-zinc-300">
+                Generated captions
+              </p>
+              {result.captions?.length ? (
+                <ul className="space-y-2">
+                  {result.captions.map((c, i) => (
+                    <li
+                      key={i}
+                      className="rounded-lg border border-zinc-200 bg-white p-3 text-sm dark:border-zinc-700 dark:bg-zinc-800"
+                    >
+                      {c}
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="text-sm text-zinc-500 dark:text-zinc-400">
+                  No captions returned. The API may use a different response
+                  shape—check ALMOSTCRACKD_API_URL and network tab.
+                </p>
+              )}
+            </div>
+          </div>
+        ) : null}
+      </section>
+    </div>
+  );
+}

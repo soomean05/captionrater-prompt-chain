@@ -1,0 +1,98 @@
+"use server";
+
+import { revalidatePath } from "next/cache";
+import { redirect } from "next/navigation";
+import {
+  getFlavor,
+  updateFlavor,
+  deleteFlavor,
+} from "@/lib/db/flavors";
+import {
+  createStep,
+  updateStep,
+  deleteStep,
+  reorderStep,
+  listStepsForFlavor,
+} from "@/lib/db/steps";
+
+export async function updateFlavorAction(formData: FormData) {
+  const id = String(formData.get("id") ?? "");
+  const name = String(formData.get("name") ?? "").trim();
+  const description = String(formData.get("description") ?? "").trim();
+  if (!id) return { error: "ID is required" };
+  if (!name) return { error: "Name is required" };
+
+  const { error } = await updateFlavor(id, { name, description });
+  if (error) return { error: error.message };
+  revalidatePath("/flavors");
+  revalidatePath(`/flavors/${id}`);
+  redirect(`/flavors/${id}`);
+}
+
+export async function deleteFlavorAction(formData: FormData) {
+  const id = String(formData.get("id") ?? "");
+  if (!id) return { error: "ID is required" };
+
+  const { error } = await deleteFlavor(id);
+  if (error) return { error: error.message };
+  revalidatePath("/flavors");
+  revalidatePath("/dashboard");
+  redirect("/flavors");
+}
+
+export async function createStepAction(formData: FormData) {
+  const flavorId = String(formData.get("humor_flavor_id") ?? "");
+  const content = String(formData.get("content") ?? "").trim();
+  if (!flavorId) return { error: "Flavor ID is required" };
+  if (!content) return { error: "Content is required" };
+
+  const { data: steps } = await listStepsForFlavor(flavorId);
+  const nextNum = steps?.length ? Math.max(...steps.map((s) => s.step_number ?? 0)) + 1 : 1;
+
+  const { error } = await createStep({
+    humor_flavor_id: flavorId,
+    step_number: nextNum,
+    content,
+  });
+  if (error) return { error: error.message };
+  revalidatePath(`/flavors/${flavorId}`);
+}
+
+export async function updateStepAction(formData: FormData) {
+  const id = String(formData.get("id") ?? "");
+  const content = String(formData.get("content") ?? "").trim();
+  const flavorId = String(formData.get("humor_flavor_id") ?? "");
+  if (!id) return { error: "ID is required" };
+
+  const { error } = await updateStep(id, { content });
+  if (error) return { error: error.message };
+  revalidatePath(`/flavors/${flavorId}`);
+}
+
+export async function deleteStepAction(formData: FormData) {
+  const id = String(formData.get("id") ?? "");
+  const flavorId = String(formData.get("humor_flavor_id") ?? "");
+  if (!id) return { error: "ID is required" };
+
+  const { error } = await deleteStep(id);
+  if (error) return { error: error.message };
+  revalidatePath(`/flavors/${flavorId}`);
+}
+
+export async function moveStepUpAction(formData: FormData) {
+  const id = String(formData.get("id") ?? "");
+  if (!id) return { error: "ID is required" };
+  const { error } = await reorderStep(id, "up");
+  if (error) return { error: error.message };
+  const { data: step } = await import("@/lib/db/steps").then((m) => m.getStep(id));
+  if (step) revalidatePath(`/flavors/${step.humor_flavor_id}`);
+}
+
+export async function moveStepDownAction(formData: FormData) {
+  const id = String(formData.get("id") ?? "");
+  if (!id) return { error: "ID is required" };
+  const { error } = await reorderStep(id, "down");
+  if (error) return { error: error.message };
+  const { data: step } = await import("@/lib/db/steps").then((m) => m.getStep(id));
+  if (step) revalidatePath(`/flavors/${step.humor_flavor_id}`);
+}
