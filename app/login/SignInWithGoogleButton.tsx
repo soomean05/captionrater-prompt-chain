@@ -5,10 +5,15 @@ import { createClient } from "@/lib/supabase/client";
 export function SignInWithGoogleButton() {
   async function handleSignIn() {
     const supabase = createClient();
+    const redirectTo = `${window.location.origin}/auth/callback`;
     const { data, error } = await supabase.auth.signInWithOAuth({
       provider: "google",
       options: {
-        redirectTo: `${window.location.origin}/auth/callback`,
+        redirectTo,
+        queryParams: {
+          // Force account chooser instead of silently reusing last Google account.
+          prompt: "select_account",
+        },
       },
     });
 

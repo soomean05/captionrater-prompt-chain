@@ -6,14 +6,13 @@ import { SignInWithGoogleButton } from "./SignInWithGoogleButton";
 export default async function LoginPage({
   searchParams,
 }: {
-  searchParams: Promise<{ error?: string }>;
+  searchParams: Promise<{ error?: string; switched?: string }>;
 }) {
-  const { error } = await searchParams;
+  const { error, switched } = await searchParams;
 
   const supabase = await createClient();
-  const { data } = await supabase.auth.getClaims();
-  const claims = data?.claims as { sub?: string } | undefined;
-  if (claims?.sub) {
+  const { data } = await supabase.auth.getUser();
+  if (data.user?.id) {
     redirect("/dashboard");
   }
 
@@ -32,10 +31,19 @@ export default async function LoginPage({
             {error}
           </div>
         ) : null}
+        {switched ? (
+          <div className="mt-4 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800 dark:border-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-200">
+            Signed out. Choose the account you want to use.
+          </div>
+        ) : null}
 
         <div className="mt-6">
           <SignInWithGoogleButton />
         </div>
+
+        <p className="mt-4 text-xs text-zinc-500 dark:text-zinc-400">
+          Google account selection is forced on each sign-in attempt.
+        </p>
 
         <div className="mt-6">
           <Link
