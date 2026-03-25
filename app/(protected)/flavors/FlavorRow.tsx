@@ -6,23 +6,23 @@ import type { HumorFlavor } from "@/lib/db/flavors";
 
 export function FlavorRow({ flavor }: { flavor: HumorFlavor }) {
   return (
-    <tr className="border-b border-zinc-100 last:border-0 dark:border-zinc-700">
+    <tr className="border-b border-border last:border-0">
       <td className="px-4 py-3">
         <Link
           href={`/flavors/${flavor.id}`}
-          className="font-medium text-zinc-900 hover:underline dark:text-zinc-100"
+          className="font-medium text-card-foreground hover:underline"
         >
           {flavor.name ?? "—"}
         </Link>
       </td>
-      <td className="max-w-md truncate px-4 py-3 text-zinc-700 dark:text-zinc-400">
+      <td className="max-w-md truncate px-4 py-3 muted-text">
         {flavor.description ?? "—"}
       </td>
       <td className="px-4 py-3 text-right">
         <div className="flex justify-end gap-2">
           <Link
             href={`/flavors/${flavor.id}`}
-            className="rounded px-2 py-1 text-sm text-zinc-600 hover:bg-zinc-100 dark:text-zinc-400 dark:hover:bg-zinc-700"
+            className="btn-ghost"
           >
             Edit
           </Link>
@@ -40,7 +40,7 @@ export function FlavorRow({ flavor }: { flavor: HumorFlavor }) {
                   e.preventDefault();
                 }
               }}
-              className="rounded px-2 py-1 text-sm text-red-600 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-900/20"
+              className="btn-danger-ghost"
             >
               Delete
             </button>

@@ -17,22 +17,22 @@ export default async function LoginPage({
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-zinc-50 px-6 dark:bg-zinc-900">
-      <div className="w-full max-w-sm rounded-2xl border border-zinc-200 bg-white p-8 shadow-sm dark:border-zinc-700 dark:bg-zinc-800">
-        <h1 className="text-xl font-semibold text-zinc-900 dark:text-zinc-100">
+    <div className="page-shell flex items-center justify-center px-6">
+      <div className="card-surface w-full max-w-sm p-8">
+        <h1 className="text-xl font-semibold text-foreground">
           Log in
         </h1>
-        <p className="mt-1 text-sm text-zinc-600 dark:text-zinc-400">
+        <p className="mt-1 text-sm muted-text">
           Sign in with Google to access the Prompt Chain Tool.
         </p>
 
         {error ? (
-          <div className="mt-4 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800 dark:border-red-800 dark:bg-red-900/30 dark:text-red-200">
+          <div className="alert-error mt-4 px-3 py-2">
             {error}
           </div>
         ) : null}
         {switched ? (
-          <div className="mt-4 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800 dark:border-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-200">
+          <div className="alert-success mt-4 px-3 py-2">
             Signed out. Choose the account you want to use.
           </div>
         ) : null}
@@ -41,14 +41,14 @@ export default async function LoginPage({
           <SignInWithGoogleButton />
         </div>
 
-        <p className="mt-4 text-xs text-zinc-500 dark:text-zinc-400">
+        <p className="mt-4 text-xs text-muted-foreground">
           Google account selection is forced on each sign-in attempt.
         </p>
 
         <div className="mt-6">
           <Link
             href="/"
-            className="text-sm text-zinc-600 underline hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100"
+            className="text-sm muted-text underline hover:text-foreground"
           >
             Back to home
           </Link>

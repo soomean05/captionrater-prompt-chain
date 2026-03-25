@@ -15,17 +15,17 @@ export default async function HomePage() {
   }
 
   return (
-    <div className="flex min-h-screen flex-col items-center justify-center gap-8 bg-zinc-50 px-6 dark:bg-zinc-900">
-      <h1 className="text-2xl font-semibold text-zinc-900 dark:text-zinc-100">
+    <div className="page-shell flex flex-col items-center justify-center gap-8 px-6">
+      <h1 className="text-2xl font-semibold text-foreground">
         Prompt Chain Tool
       </h1>
-      <p className="text-center text-zinc-600 dark:text-zinc-400">
+      <p className="text-center muted-text">
         Manage humor flavors and test caption generation via api.almostcrackd.ai
       </p>
       <div className="flex flex-col gap-4 sm:flex-row">
         <Link
           href="/login"
-          className="rounded-lg bg-zinc-900 px-6 py-3 text-sm font-medium text-white hover:bg-zinc-800 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-200"
+          className="btn-primary px-6 py-3"
         >
           Log in
         </Link>

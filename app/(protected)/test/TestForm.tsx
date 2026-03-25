@@ -35,15 +35,15 @@ export function TestForm({ flavors }: { flavors: HumorFlavor[] }) {
 
   return (
     <div className="grid gap-8 lg:grid-cols-2">
-      <section>
-        <h2 className="mb-4 text-lg font-medium text-zinc-900 dark:text-zinc-100">
+      <section className="card-surface p-5">
+        <h2 className="mb-4 text-lg font-medium text-card-foreground">
           Generate captions
         </h2>
         <form action={handleSubmit} className="space-y-4">
           <div>
             <label
               htmlFor="flavor_id"
-              className="mb-1 block text-sm font-medium text-zinc-700 dark:text-zinc-300"
+              className="mb-1 block text-sm font-medium text-card-foreground"
             >
               Humor flavor
             </label>
@@ -51,7 +51,7 @@ export function TestForm({ flavors }: { flavors: HumorFlavor[] }) {
               id="flavor_id"
               name="flavor_id"
               required
-              className="w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm dark:border-zinc-600 dark:bg-zinc-800 dark:text-zinc-100"
+              className="input-base w-full"
             >
               <option value="">Select a flavor</option>
               {flavors.map((f) => (
@@ -65,7 +65,7 @@ export function TestForm({ flavors }: { flavors: HumorFlavor[] }) {
           <div>
             <label
               htmlFor="image_url"
-              className="mb-1 block text-sm font-medium text-zinc-700 dark:text-zinc-300"
+              className="mb-1 block text-sm font-medium text-card-foreground"
             >
               Image URL
             </label>
@@ -76,60 +76,60 @@ export function TestForm({ flavors }: { flavors: HumorFlavor[] }) {
               placeholder={SAMPLE_IMAGE_URL}
               defaultValue={SAMPLE_IMAGE_URL}
               required
-              className="w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm dark:border-zinc-600 dark:bg-zinc-800 dark:text-zinc-100"
+              className="input-base w-full"
             />
           </div>
 
           <button
             type="submit"
             disabled={pending}
-            className="rounded-lg bg-zinc-900 px-4 py-2 text-sm font-medium text-white hover:bg-zinc-800 disabled:opacity-50 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-200"
+            className="btn-primary"
           >
             {pending ? "Generating…" : "Generate captions"}
           </button>
         </form>
       </section>
 
-      <section>
-        <h2 className="mb-4 text-lg font-medium text-zinc-900 dark:text-zinc-100">
+      <section className="card-surface p-5">
+        <h2 className="mb-4 text-lg font-medium text-card-foreground">
           Results
         </h2>
         {result === null && !pending ? (
-          <p className="rounded-xl border border-zinc-200 bg-white p-6 text-center text-zinc-500 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-400">
+          <p className="empty-state p-6">
             Submit the form to generate captions.
           </p>
         ) : result && "error" in result ? (
-          <div className="rounded-xl border border-red-200 bg-red-50 p-6 text-red-800 dark:border-red-800 dark:bg-red-900/30 dark:text-red-200">
+          <div className="alert-error p-6">
             {result.error}
           </div>
         ) : result && "captions" in result ? (
           <div className="space-y-4">
             {result.flavor ? (
               <div>
-                <p className="text-sm font-medium text-zinc-700 dark:text-zinc-300">
+                <p className="text-sm font-medium text-card-foreground">
                   Flavor: {result.flavor.name ?? result.flavor.id}
                 </p>
               </div>
             ) : null}
             {result.imageUrl ? (
               <div>
-                <p className="mb-2 text-sm font-medium text-zinc-700 dark:text-zinc-300">
+                <p className="mb-2 text-sm font-medium text-card-foreground">
                   Image preview
                 </p>
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img
                   src={result.imageUrl}
                   alt="Test image"
-                  className="max-h-48 rounded-lg border border-zinc-200 object-cover dark:border-zinc-700"
+                  className="max-h-48 rounded-lg border border-border object-cover"
                 />
               </div>
             ) : null}
             {result.steps?.length ? (
               <div>
-                <p className="mb-2 text-sm font-medium text-zinc-700 dark:text-zinc-300">
+                <p className="mb-2 text-sm font-medium text-card-foreground">
                   Steps used
                 </p>
-                <ol className="list-inside list-decimal space-y-1 text-sm text-zinc-600 dark:text-zinc-400">
+                <ol className="list-inside list-decimal space-y-1 text-sm muted-text">
                   {result.steps.map((s, i) => (
                     <li key={i} className="truncate">
                       {getContent(s)}
@@ -139,7 +139,7 @@ export function TestForm({ flavors }: { flavors: HumorFlavor[] }) {
               </div>
             ) : null}
             <div>
-              <p className="mb-2 text-sm font-medium text-zinc-700 dark:text-zinc-300">
+              <p className="mb-2 text-sm font-medium text-card-foreground">
                 Generated captions
               </p>
               {result.captions?.length ? (
@@ -147,14 +147,14 @@ export function TestForm({ flavors }: { flavors: HumorFlavor[] }) {
                   {result.captions.map((c, i) => (
                     <li
                       key={i}
-                      className="rounded-lg border border-zinc-200 bg-white p-3 text-sm dark:border-zinc-700 dark:bg-zinc-800"
+                      className="rounded-lg border border-border bg-background p-3 text-sm"
                     >
                       {c}
                     </li>
                   ))}
                 </ul>
               ) : (
-                <p className="text-sm text-zinc-500 dark:text-zinc-400">
+                <p className="text-sm text-muted-foreground">
                   No captions returned. The API may use a different response
                   shape—check ALMOSTCRACKD_API_URL and network tab.
                 </p>

@@ -33,7 +33,7 @@ export function SignInWithGoogleButton() {
     <button
       type="button"
       onClick={handleSignIn}
-      className="flex w-full items-center justify-center gap-2 rounded-lg border border-zinc-300 bg-white px-4 py-3 text-sm font-medium text-zinc-900 shadow-sm transition-colors hover:bg-zinc-50 dark:border-zinc-600 dark:bg-zinc-800 dark:text-zinc-100 dark:hover:bg-zinc-700"
+      className="btn-secondary flex w-full items-center justify-center gap-2 px-4 py-3 shadow-sm transition-colors"
     >
       <svg className="h-5 w-5" viewBox="0 0 24 24">
         <path

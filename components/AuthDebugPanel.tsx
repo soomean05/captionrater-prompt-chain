@@ -31,6 +31,10 @@ type DebugData = {
 };
 
 export function AuthDebugPanel() {
+  if (process.env.NODE_ENV !== "development") {
+    return null;
+  }
+
   const [state, setState] = useState<{
     clientUser: { id: string; email: string | null } | null;
     clientProfile: Record<string, unknown> | null;
@@ -90,14 +94,14 @@ export function AuthDebugPanel() {
   }, []);
 
   return (
-    <section className="rounded-xl border border-zinc-200 bg-white p-4 text-sm dark:border-zinc-700 dark:bg-zinc-800">
-      <h2 className="mb-2 font-medium text-zinc-900 dark:text-zinc-100">
+    <section className="card-surface overflow-hidden p-4 text-sm">
+      <h2 className="mb-2 font-medium text-card-foreground">
         Auth Debug
       </h2>
       {state.loading ? (
-        <p className="text-zinc-600 dark:text-zinc-400">Loading auth debug...</p>
+        <p className="muted-text">Loading auth debug...</p>
       ) : (
-        <div className="space-y-2 text-zinc-700 dark:text-zinc-300">
+        <div className="space-y-2 break-words text-card-foreground">
           <p>
             <strong>State:</strong> {state.server?.status ?? "unknown"}
           </p>

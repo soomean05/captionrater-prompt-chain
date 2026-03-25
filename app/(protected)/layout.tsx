@@ -11,9 +11,9 @@ export default async function ProtectedLayout({
   const user = await requireAuthorized();
 
   return (
-    <div className="min-h-screen bg-background text-foreground">
+    <div className="page-shell">
       <div className="mx-auto flex min-h-screen max-w-6xl flex-col">
-        <header className="sticky top-0 z-10 border-b border-border bg-background/95 px-4 py-4 backdrop-blur">
+        <header className="sticky top-0 z-10 border-b border-border bg-card/95 px-4 py-4 backdrop-blur">
           <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
             <div className="flex items-center gap-4">
               <Link
@@ -30,7 +30,7 @@ export default async function ProtectedLayout({
             <form action={signOut} className="sm:ml-auto">
               <button
                 type="submit"
-                className="rounded-lg border border-border bg-card px-3 py-2 text-sm font-medium text-card-foreground hover:bg-muted"
+                className="btn-secondary px-3"
               >
                 Sign out
               </button>

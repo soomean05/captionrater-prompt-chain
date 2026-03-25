@@ -12,7 +12,7 @@ export function ThemeToggle() {
   if (!mounted) {
     return (
       <button
-        className="rounded-lg border border-border bg-card px-3 py-2 text-sm font-medium text-card-foreground opacity-50"
+        className="btn-secondary px-3 opacity-50"
         disabled
       >
         Theme
@@ -24,7 +24,7 @@ export function ThemeToggle() {
     <select
       value={theme}
       onChange={(e) => setTheme(e.target.value)}
-      className="rounded-lg border border-border bg-card px-3 py-2 text-sm font-medium text-card-foreground"
+      className="input-base bg-card py-2 font-medium"
     >
       <option value="light">Light</option>
       <option value="dark">Dark</option>

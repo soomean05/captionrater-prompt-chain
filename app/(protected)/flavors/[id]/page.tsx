@@ -24,34 +24,34 @@ export default async function FlavorDetailPage({
       <div className="flex items-center gap-4">
         <Link
           href="/flavors"
-          className="text-sm text-zinc-600 hover:underline dark:text-zinc-400"
+          className="text-sm muted-text hover:underline"
         >
           ← Back to flavors
         </Link>
       </div>
 
       <div>
-        <h1 className="text-2xl font-semibold text-zinc-900 dark:text-zinc-100">
+        <h1 className="text-2xl font-semibold text-foreground">
           {flavor.name ?? "Unnamed flavor"}
         </h1>
-        <p className="mt-1 text-zinc-600 dark:text-zinc-400">
+        <p className="mt-1 muted-text">
           {flavor.description ?? "No description"}
         </p>
       </div>
 
       <section>
-        <h2 className="mb-4 text-lg font-medium text-zinc-900 dark:text-zinc-100">
+        <h2 className="mb-4 text-lg font-medium text-foreground">
           Edit flavor
         </h2>
         <FlavorEditForm flavor={flavor} />
       </section>
 
       <section>
-        <h2 className="mb-4 text-lg font-medium text-zinc-900 dark:text-zinc-100">
+        <h2 className="mb-4 text-lg font-medium text-foreground">
           Steps (ordered)
         </h2>
         {stepsError ? (
-          <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800 dark:border-red-800 dark:bg-red-900/30 dark:text-red-200">
+          <div className="alert-error">
             {stepsError.message}
           </div>
         ) : (

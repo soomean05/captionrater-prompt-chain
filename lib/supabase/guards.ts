@@ -52,7 +52,9 @@ async function getProfileById(
   useAdminClient = false
 ): Promise<{ row: ProfileGateRow | null; error: string | null }> {
   const query = `public.profiles select id,email,is_superadmin,is_matrix_admin where id = ${userId}`;
-  console.log("[auth] profile query:", query);
+  if (process.env.NODE_ENV === "development") {
+    console.log("[auth] profile query:", query);
+  }
 
   if (useAdminClient) {
     const admin = createAdminClient();
@@ -98,6 +100,7 @@ function normalizeBoolean(value: unknown): boolean | null {
 
 export async function getAuthGateResult(): Promise<AuthGateResult> {
   noStore();
+  const isDev = process.env.NODE_ENV === "development";
   const user = await getAuthedUser();
   if (!user) {
     return {
@@ -111,7 +114,9 @@ export async function getAuthGateResult(): Promise<AuthGateResult> {
     };
   }
 
-  console.log("[auth] authenticated user:", { id: user.id, email: user.email });
+  if (isDev) {
+    console.log("[auth] authenticated user:", { id: user.id, email: user.email });
+  }
 
   const clientResult = await getProfileById(user.id);
   let profile = clientResult.row;
@@ -141,19 +146,21 @@ export async function getAuthGateResult(): Promise<AuthGateResult> {
   const allowed =
     normalizedSuperadmin === true || normalizedMatrixAdmin === true;
 
-  console.log("[auth] profile row:", {
-    id: profile.id,
-    email: profile.email,
-    is_superadmin: profile.is_superadmin,
-    is_matrix_admin: profile.is_matrix_admin,
-    is_superadmin_type: typeof profile.is_superadmin,
-    is_matrix_admin_type: typeof profile.is_matrix_admin,
-    normalized_is_superadmin: normalizedSuperadmin,
-    normalized_is_matrix_admin: normalizedMatrixAdmin,
-    expected_id_match: profile.id === "c3aa6727-4578-4ed7-b6e8-b9f5d4ea2129",
-    expected_email_match: profile.email === "sl5676@columbia.edu",
-    allowed,
-  });
+  if (isDev) {
+    console.log("[auth] profile row:", {
+      id: profile.id,
+      email: profile.email,
+      is_superadmin: profile.is_superadmin,
+      is_matrix_admin: profile.is_matrix_admin,
+      is_superadmin_type: typeof profile.is_superadmin,
+      is_matrix_admin_type: typeof profile.is_matrix_admin,
+      normalized_is_superadmin: normalizedSuperadmin,
+      normalized_is_matrix_admin: normalizedMatrixAdmin,
+      expected_id_match: profile.id === "c3aa6727-4578-4ed7-b6e8-b9f5d4ea2129",
+      expected_email_match: profile.email === "sl5676@columbia.edu",
+      allowed,
+    });
+  }
 
   return {
     status: allowed ? "authorized" : "unauthorized",

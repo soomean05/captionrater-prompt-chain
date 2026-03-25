@@ -20,7 +20,7 @@ export function FlavorCreateForm({ className }: { className?: string }) {
   return (
     <form action={handleSubmit} className={className}>
       {error ? (
-        <p className="mb-2 text-sm text-red-600 dark:text-red-400">{error}</p>
+        <p className="mb-2 text-sm text-danger">{error}</p>
       ) : null}
       <div className="flex flex-wrap gap-2">
         <input
@@ -28,18 +28,18 @@ export function FlavorCreateForm({ className }: { className?: string }) {
           name="name"
           placeholder="Flavor name"
           required
-          className="rounded-lg border border-zinc-300 px-3 py-2 text-sm dark:border-zinc-600 dark:bg-zinc-800 dark:text-zinc-100"
+          className="input-base"
         />
         <input
           type="text"
           name="description"
           placeholder="Description (optional)"
-          className="rounded-lg border border-zinc-300 px-3 py-2 text-sm dark:border-zinc-600 dark:bg-zinc-800 dark:text-zinc-100"
+          className="input-base"
         />
         <button
           type="submit"
           disabled={pending}
-          className="rounded-lg bg-zinc-900 px-4 py-2 text-sm font-medium text-white hover:bg-zinc-800 disabled:opacity-50 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-200"
+          className="btn-primary"
         >
           {pending ? "Creating…" : "Create"}
         </button>

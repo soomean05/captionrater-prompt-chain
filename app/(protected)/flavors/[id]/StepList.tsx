@@ -13,7 +13,7 @@ export function StepList({
     <div className="space-y-4">
       <StepCreateForm flavorId={flavorId} />
       {steps.length === 0 ? (
-        <p className="rounded-xl border border-zinc-200 bg-white p-6 text-center text-zinc-600 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-400">
+        <p className="empty-state p-6">
           No steps yet. Add one above.
         </p>
       ) : (

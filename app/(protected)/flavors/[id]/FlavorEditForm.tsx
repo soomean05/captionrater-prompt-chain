@@ -21,7 +21,7 @@ export function FlavorEditForm({ flavor }: { flavor: HumorFlavor }) {
   return (
     <div className="space-y-4">
       {error ? (
-        <p className="text-sm text-red-600 dark:text-red-400">{error}</p>
+        <p className="text-sm text-danger">{error}</p>
       ) : null}
       <form action={handleUpdate}>
         <input type="hidden" name="id" value={flavor.id} />
@@ -32,19 +32,19 @@ export function FlavorEditForm({ flavor }: { flavor: HumorFlavor }) {
             defaultValue={flavor.name ?? ""}
             placeholder="Name"
             required
-            className="rounded-lg border border-zinc-300 px-3 py-2 text-sm dark:border-zinc-600 dark:bg-zinc-800 dark:text-zinc-100"
+            className="input-base"
           />
           <input
             type="text"
             name="description"
             defaultValue={flavor.description ?? ""}
             placeholder="Description"
-            className="rounded-lg border border-zinc-300 px-3 py-2 text-sm dark:border-zinc-600 dark:bg-zinc-800 dark:text-zinc-100"
+            className="input-base"
           />
           <button
             type="submit"
             disabled={pending}
-            className="rounded-lg bg-zinc-900 px-4 py-2 text-sm font-medium text-white hover:bg-zinc-800 disabled:opacity-50 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-200"
+            className="btn-primary"
           >
             {pending ? "Saving…" : "Save"}
           </button>
@@ -63,7 +63,7 @@ export function FlavorEditForm({ flavor }: { flavor: HumorFlavor }) {
               e.preventDefault();
             }
           }}
-          className="text-sm text-red-600 hover:underline dark:text-red-400"
+          className="text-sm text-danger hover:underline"
         >
           Delete flavor
         </button>
