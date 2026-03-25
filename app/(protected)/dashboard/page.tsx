@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { AuthDebugPanel } from "@/components/AuthDebugPanel";
 
 export default function DashboardPage() {
   return (
@@ -37,6 +38,8 @@ export default function DashboardPage() {
           </p>
         </Link>
       </div>
+
+      <AuthDebugPanel />
     </div>
   );
 }

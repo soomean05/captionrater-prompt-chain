@@ -1,17 +1,17 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { createClient } from "@/lib/supabase/server";
-import { isAuthorized } from "@/lib/supabase/guards";
+import { getAuthGateResult } from "@/lib/supabase/guards";
 
 export default async function HomePage() {
-  const supabase = await createClient();
-  const { data } = await supabase.auth.getClaims();
-  const claims = data?.claims as { sub?: string } | undefined;
-
-  if (claims?.sub) {
-    const ok = await isAuthorized(claims.sub);
-    if (ok) redirect("/dashboard");
-    redirect("/not-authorized");
+  const gate = await getAuthGateResult();
+  if (gate.status === "authorized") {
+    redirect("/dashboard");
+  }
+  if (gate.status === "no_profile") {
+    redirect("/not-authorized?reason=no_profile");
+  }
+  if (gate.status === "unauthorized") {
+    redirect("/not-authorized?reason=unauthorized");
   }
 
   return (
