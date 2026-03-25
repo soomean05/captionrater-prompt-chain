@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { getAuthGateResult } from "@/lib/supabase/guards";
 
 function getReasonMessage(reason?: string) {
   if (reason === "no_profile") {
@@ -16,6 +17,8 @@ export default async function NotAuthorizedPage({
   searchParams: Promise<{ reason?: string }>;
 }) {
   const { reason } = await searchParams;
+  const gate = await getAuthGateResult();
+  const profile = gate.profile;
   return (
     <div className="min-h-screen bg-zinc-50 dark:bg-zinc-900">
       <div className="mx-auto flex min-h-screen max-w-lg flex-col justify-center px-6 py-12">
@@ -29,6 +32,32 @@ export default async function NotAuthorizedPage({
           <p className="mt-2 text-xs text-zinc-500 dark:text-zinc-400">
             Auth state: {reason ?? "unknown"}
           </p>
+          <div className="mt-4 rounded-lg border border-zinc-200 bg-zinc-50 p-3 text-xs text-zinc-700 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-300">
+            <p className="font-semibold">Temporary auth debug</p>
+            <p>auth user id: {gate.user?.id ?? "none"}</p>
+            <p>auth email: {gate.user?.email ?? "none"}</p>
+            <p>profile id: {profile?.id ?? "none"}</p>
+            <p>profile email: {profile?.email ?? "none"}</p>
+            <p>
+              is_superadmin raw:{" "}
+              {profile ? String(profile.is_superadmin) : "none"} (
+              {profile ? typeof profile.is_superadmin : "n/a"})
+            </p>
+            <p>
+              is_matrix_admin raw:{" "}
+              {profile ? String(profile.is_matrix_admin) : "none"} (
+              {profile ? typeof profile.is_matrix_admin : "n/a"})
+            </p>
+            <p>
+              normalized is_superadmin:{" "}
+              {gate.normalized ? String(gate.normalized.is_superadmin) : "none"}
+            </p>
+            <p>
+              normalized is_matrix_admin:{" "}
+              {gate.normalized ? String(gate.normalized.is_matrix_admin) : "none"}
+            </p>
+            <p>final allowed: {String(gate.allowed)}</p>
+          </div>
           <div className="mt-6 flex gap-3">
             <Link
               href="/login"

@@ -22,8 +22,14 @@ export async function GET() {
           email: gate.profile.email,
           is_superadmin: gate.profile.is_superadmin,
           is_matrix_admin: gate.profile.is_matrix_admin,
+          is_superadmin_type: typeof gate.profile.is_superadmin,
+          is_matrix_admin_type: typeof gate.profile.is_matrix_admin,
+          expected_id_match:
+            gate.profile.id === "c3aa6727-4578-4ed7-b6e8-b9f5d4ea2129",
+          expected_email_match: gate.profile.email === "sl5676@columbia.edu",
         }
       : null,
+    normalized: gate.normalized,
     env: {
       NEXT_PUBLIC_SUPABASE_URL: process.env.NEXT_PUBLIC_SUPABASE_URL ?? null,
       NEXT_PUBLIC_SUPABASE_ANON_KEY_PREFIX:

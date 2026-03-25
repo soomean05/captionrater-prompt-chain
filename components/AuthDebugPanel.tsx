@@ -11,6 +11,14 @@ type DebugData = {
   profile: {
     id: string;
     email: string | null;
+    is_superadmin: unknown;
+    is_matrix_admin: unknown;
+    is_superadmin_type: string;
+    is_matrix_admin_type: string;
+    expected_id_match: boolean;
+    expected_email_match: boolean;
+  } | null;
+  normalized: {
     is_superadmin: boolean | null;
     is_matrix_admin: boolean | null;
   } | null;
@@ -116,6 +124,12 @@ export function AuthDebugPanel() {
           <p>
             <strong>Server profile:</strong>{" "}
             {state.server?.profile ? JSON.stringify(state.server.profile) : "none"}
+          </p>
+          <p>
+            <strong>Normalized flags:</strong>{" "}
+            {state.server?.normalized
+              ? JSON.stringify(state.server.normalized)
+              : "none"}
           </p>
           <p>
             <strong>Supabase URL:</strong>{" "}
