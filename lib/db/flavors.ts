@@ -198,8 +198,8 @@ export async function duplicateFlavor(input: { id: string; userId: string }) {
   for (const step of steps ?? []) {
     const { error: createStepError } = await createStep({
       humor_flavor_id: createdFlavor.id,
-      orderValue: step.order_value ?? undefined,
-      content: step.prompt ?? "",
+      orderBy: step.order_by ?? 1,
+      llmUserPrompt: step.llm_user_prompt ?? "",
       userId: input.userId,
     });
     if (createStepError) return { data: createdFlavor, error: createStepError };

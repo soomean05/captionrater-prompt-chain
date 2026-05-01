@@ -25,7 +25,7 @@ export function StepCreateForm({ flavorId }: { flavorId: string }) {
       ) : null}
       <div className="flex flex-wrap gap-2">
         <textarea
-          name="content"
+          name="step_text"
           placeholder="Step content / prompt"
           required
           rows={2}

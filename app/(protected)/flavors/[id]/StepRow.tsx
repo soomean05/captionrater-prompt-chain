@@ -11,12 +11,8 @@ import type { HumorFlavorStep } from "@/lib/db/steps";
 
 function getContent(step: HumorFlavorStep): string {
   return (
-    (step as { prompt?: string }).prompt ??
-    (step as { instruction?: string }).instruction ??
-    (step as { step_text?: string }).step_text ??
-    (step as { system_prompt?: string }).system_prompt ??
-    (step as { user_prompt?: string }).user_prompt ??
-    (step as { text?: string }).text ??
+    (step as { llm_user_prompt?: string }).llm_user_prompt ??
+    (step as { description?: string }).description ??
     ""
   );
 }
@@ -50,8 +46,13 @@ export function StepRow({
         >
           <input type="hidden" name="id" value={step.id} />
           <input type="hidden" name="humor_flavor_id" value={flavorId} />
+          <input
+            type="hidden"
+            name="order_by"
+            value={String((step as { order_by?: number }).order_by ?? "")}
+          />
           <textarea
-            name="content"
+            name="step_text"
             defaultValue={content}
             rows={3}
             className="input-base w-full"
@@ -78,7 +79,7 @@ export function StepRow({
           <div className="flex items-start justify-between gap-4">
             <div className="min-w-0 flex-1">
               <span className="mr-2 inline-flex h-6 w-6 items-center justify-center rounded-full bg-muted text-xs font-medium text-muted-foreground">
-                {(step as { order_value?: number }).order_value ?? "?"}
+                {(step as { order_by?: number }).order_by ?? "?"}
               </span>
               <p className="mt-1 whitespace-pre-wrap text-sm text-card-foreground">
                 {content || "—"}

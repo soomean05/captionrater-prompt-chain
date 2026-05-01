@@ -46,21 +46,21 @@ export async function deleteFlavorAction(formData: FormData) {
 
 export async function createStepAction(formData: FormData) {
   const flavorId = String(formData.get("humor_flavor_id") ?? "");
-  const content = String(formData.get("content") ?? "").trim();
+  const stepText = String(formData.get("step_text") ?? "").trim();
   if (!flavorId) return { error: "Flavor ID is required" };
-  if (!content) return { error: "Content is required" };
+  if (!stepText) return { error: "Step text is required" };
   const supabase = await createClient();
   const userId = await getCurrentUserId(supabase);
 
   const { data: steps } = await listStepsForFlavor(flavorId);
-  const nextOrderValue = steps?.length
-    ? Math.max(...steps.map((s) => s.order_value ?? 0)) + 1
+  const nextOrderBy = steps?.length
+    ? Math.max(...steps.map((s) => s.order_by ?? 0)) + 1
     : 1;
 
   const { error } = await createStep({
     humor_flavor_id: flavorId,
-    orderValue: nextOrderValue,
-    content,
+    orderBy: nextOrderBy,
+    llmUserPrompt: stepText,
     userId,
   });
   if (error) return { error: error.message };
@@ -69,13 +69,19 @@ export async function createStepAction(formData: FormData) {
 
 export async function updateStepAction(formData: FormData) {
   const id = String(formData.get("id") ?? "");
-  const content = String(formData.get("content") ?? "").trim();
+  const stepText = String(formData.get("step_text") ?? "").trim();
+  const orderByValue = String(formData.get("order_by") ?? "").trim();
   const flavorId = String(formData.get("humor_flavor_id") ?? "");
   if (!id) return { error: "ID is required" };
   const supabase = await createClient();
   const userId = await getCurrentUserId(supabase);
+  const orderBy = Number.parseInt(orderByValue, 10);
 
-  const { error } = await updateStep(id, { content, userId });
+  const { error } = await updateStep(id, {
+    llmUserPrompt: stepText || undefined,
+    orderBy: Number.isFinite(orderBy) ? orderBy : undefined,
+    userId,
+  });
   if (error) return { error: error.message };
   revalidatePath(`/flavors/${flavorId}`);
 }

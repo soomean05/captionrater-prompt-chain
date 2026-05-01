@@ -8,12 +8,8 @@ import type { HumorFlavorStep } from "@/lib/db/steps";
 function getContent(step: HumorFlavorStep | Record<string, unknown>): string {
   const s = step as Record<string, unknown>;
   return (
-    (s.prompt as string) ??
-    (s.instruction as string) ??
-    (s.step_text as string) ??
-    (s.system_prompt as string) ??
-    (s.user_prompt as string) ??
-    (s.text as string) ??
+    (s.llm_user_prompt as string) ??
+    (s.description as string) ??
     ""
   );
 }

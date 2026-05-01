@@ -1,191 +1,99 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 
+const STEP_SELECT = `
+  id,
+  humor_flavor_id,
+  order_by,
+  llm_system_prompt,
+  llm_user_prompt,
+  description,
+  llm_temperature,
+  llm_input_type_id,
+  llm_output_type_id,
+  llm_model_id,
+  humor_flavor_step_type_id
+`;
+
 export type HumorFlavorStep = {
   id: string;
   humor_flavor_id: string;
-  order_value: number | null;
-  prompt: string | null;
-  created_datetime_utc?: string | null;
+  order_by: number | null;
+  llm_system_prompt: string | null;
+  llm_user_prompt: string | null;
+  description: string | null;
+  llm_temperature: number | null;
+  llm_input_type_id: number | null;
+  llm_output_type_id: number | null;
+  llm_model_id: number | null;
+  humor_flavor_step_type_id: number | null;
 };
-
-type StepColumns = {
-  contentColumn:
-    | "prompt"
-    | "instruction"
-    | "step_text"
-    | "system_prompt"
-    | "user_prompt"
-    | "text";
-  orderColumn: "order_index" | "sort_order" | "position" | "step_order" | "sequence" | null;
-  hasCreatedByUserId: boolean;
-  hasModifiedByUserId: boolean;
-};
-
-async function columnExists(table: string, column: string) {
-  const supabase = createAdminClient();
-  const { error } = await supabase.from(table).select(`id,${column}`).limit(1);
-  return !error;
-}
-
-async function getStepColumns(): Promise<StepColumns> {
-  const contentCandidates: StepColumns["contentColumn"][] = [
-    "prompt",
-    "instruction",
-    "step_text",
-    "system_prompt",
-    "user_prompt",
-    "text",
-  ];
-  let contentColumn: StepColumns["contentColumn"] = "prompt";
-  for (const candidate of contentCandidates) {
-    if (await columnExists("humor_flavor_steps", candidate)) {
-      contentColumn = candidate;
-      break;
-    }
-  }
-  const orderCandidates: Exclude<StepColumns["orderColumn"], null>[] = [
-    "order_index",
-    "sort_order",
-    "position",
-    "step_order",
-    "sequence",
-  ];
-  let orderColumn: StepColumns["orderColumn"] = null;
-  for (const candidate of orderCandidates) {
-    if (await columnExists("humor_flavor_steps", candidate)) {
-      orderColumn = candidate;
-      break;
-    }
-  }
-
-  return {
-    contentColumn,
-    orderColumn,
-    hasCreatedByUserId: await columnExists(
-      "humor_flavor_steps",
-      "created_by_user_id"
-    ),
-    hasModifiedByUserId: await columnExists(
-      "humor_flavor_steps",
-      "modified_by_user_id"
-    ),
-  };
-}
 
 export async function listStepsForFlavor(flavorId: string) {
   const supabase = createAdminClient();
-  const columns = await getStepColumns();
-  let q = supabase
+  const { data, error } = await supabase
     .from("humor_flavor_steps")
-    .select("*")
-    .eq("humor_flavor_id", flavorId);
-  q = columns.orderColumn
-    ? q.order(columns.orderColumn, { ascending: true })
-    : q.order("created_datetime_utc", { ascending: true });
-  const { data, error } = await q;
-  const mapped = ((data ?? []) as Record<string, unknown>[]).map((row) => ({
-    ...(row as HumorFlavorStep),
-    order_value: columns.orderColumn
-      ? ((row[columns.orderColumn] as number | null | undefined) ?? null)
-      : null,
-    prompt: getPromptFromRow(row),
-  })) as HumorFlavorStep[];
-  return { data: mapped, error };
+    .select(STEP_SELECT)
+    .eq("humor_flavor_id", flavorId)
+    .order("order_by", { ascending: true });
+  return { data: (data ?? []) as HumorFlavorStep[], error };
 }
 
 export async function getStep(id: string) {
   const supabase = createAdminClient();
-  const columns = await getStepColumns();
   const { data, error } = await supabase
     .from("humor_flavor_steps")
-    .select("*")
+    .select(STEP_SELECT)
     .eq("id", id)
     .maybeSingle();
-  const row = (data ?? null) as Record<string, unknown> | null;
-  return {
-    data: row
-      ? {
-          ...(row as HumorFlavorStep),
-          order_value: columns.orderColumn
-            ? ((row[columns.orderColumn] as number | null | undefined) ?? null)
-            : null,
-          prompt: getPromptFromRow(row),
-        }
-      : null,
-    error,
-  };
-}
-
-function getPromptFromRow(row: Record<string, unknown>): string {
-  return (
-    (row.prompt as string) ??
-    (row.instruction as string) ??
-    (row.step_text as string) ??
-    (row.system_prompt as string) ??
-    (row.user_prompt as string) ??
-    (row.text as string) ??
-    ""
-  );
+  return { data: data as HumorFlavorStep | null, error };
 }
 
 export async function createStep(input: {
   humor_flavor_id: string;
-  orderValue?: number;
-  content: string;
+  orderBy: number;
+  llmUserPrompt: string;
   userId: string;
 }) {
   const supabase = createAdminClient();
-  const columns = await getStepColumns();
-  const insertPayload: Record<string, unknown> = {
-    humor_flavor_id: input.humor_flavor_id,
-    [columns.contentColumn]: input.content,
-  };
-  if (columns.orderColumn && input.orderValue != null) {
-    insertPayload[columns.orderColumn] = input.orderValue;
-  }
-  if (columns.hasCreatedByUserId) insertPayload.created_by_user_id = input.userId;
-  if (columns.hasModifiedByUserId) insertPayload.modified_by_user_id = input.userId;
-
   const { data, error } = await supabase
     .from("humor_flavor_steps")
-    .insert(insertPayload)
-    .select()
+    .insert({
+    humor_flavor_id: input.humor_flavor_id,
+    order_by: input.orderBy,
+    llm_user_prompt: input.llmUserPrompt,
+    llm_system_prompt: null,
+    description: null,
+    llm_temperature: 0.7,
+    llm_input_type_id: 1,
+    llm_output_type_id: 1,
+    llm_model_id: 1,
+    humor_flavor_step_type_id: 1,
+    created_by_user_id: input.userId,
+    modified_by_user_id: input.userId,
+    })
+    .select(STEP_SELECT)
     .single();
-  return {
-    data: data
-      ? { ...data, prompt: getPromptFromRow(data as Record<string, unknown>) }
-      : null,
-    error,
-  };
+  return { data: data as HumorFlavorStep | null, error };
 }
 
 export async function updateStep(
   id: string,
-  input: { orderValue?: number; content?: string; userId?: string }
+  input: { orderBy?: number; llmUserPrompt?: string; userId: string }
 ) {
   const supabase = createAdminClient();
-  const columns = await getStepColumns();
-  const updatePayload: Record<string, unknown> = {};
-  if (columns.orderColumn && input.orderValue != null) {
-    updatePayload[columns.orderColumn] = input.orderValue;
-  }
-  if (input.content != null) updatePayload[columns.contentColumn] = input.content;
-  if (input.userId && columns.hasModifiedByUserId) {
-    updatePayload.modified_by_user_id = input.userId;
-  }
+  const updatePayload: Record<string, unknown> = {
+    modified_by_user_id: input.userId,
+  };
+  if (input.orderBy != null) updatePayload.order_by = input.orderBy;
+  if (input.llmUserPrompt != null) updatePayload.llm_user_prompt = input.llmUserPrompt;
 
   const { data, error } = await supabase
     .from("humor_flavor_steps")
     .update(updatePayload)
     .eq("id", id)
-    .select()
+    .select(STEP_SELECT)
     .single();
-  return {
-    data: data
-      ? { ...data, prompt: getPromptFromRow(data as Record<string, unknown>) }
-      : null,
-    error,
-  };
+  return { data: data as HumorFlavorStep | null, error };
 }
 
 export async function deleteStep(id: string) {
@@ -199,10 +107,6 @@ export async function reorderStep(
   direction: "up" | "down"
 ): Promise<{ error: { message: string } | null }> {
   const supabase = createAdminClient();
-  const columns = await getStepColumns();
-  if (!columns.orderColumn) {
-    return { error: { message: "Step ordering is not supported by this schema" } };
-  }
   const { data: step, error: stepErr } = await getStep(id);
   if (stepErr || !step) return { error: stepErr ?? { message: "Step not found" } };
 
@@ -218,18 +122,18 @@ export async function reorderStep(
   if (swapIdx < 0 || swapIdx >= steps.length) return { error: null };
 
   const otherStep = steps[swapIdx];
-  const currentNum = step.order_value ?? idx;
-  const otherNum = otherStep.order_value ?? swapIdx;
+  const currentNum = step.order_by ?? idx;
+  const otherNum = otherStep.order_by ?? swapIdx;
 
   const { error: u1 } = await supabase
     .from("humor_flavor_steps")
-    .update({ [columns.orderColumn]: otherNum })
+    .update({ order_by: otherNum })
     .eq("id", id);
   if (u1) return { error: u1 };
 
   const { error: u2 } = await supabase
     .from("humor_flavor_steps")
-    .update({ [columns.orderColumn]: currentNum })
+    .update({ order_by: currentNum })
     .eq("id", otherStep.id);
   if (u2) return { error: u2 };
 
