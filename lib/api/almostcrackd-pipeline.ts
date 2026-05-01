@@ -7,6 +7,8 @@
  * No guessed /caption routes. One request per step; on 405 we surface the exact URL and stop.
  */
 
+import type { HumorFlavorStep } from "@/lib/db/steps";
+
 export function getAlmostCrackdApiBase(): string {
   return (process.env.ALMOSTCRACKD_API_BASE ?? "https://api.almostcrackd.ai").replace(
     /\/$/,
@@ -22,6 +24,52 @@ export type PipelinePostFailure = {
 };
 
 export type PipelinePostSuccess<T> = { ok: true; data: T };
+
+/** Pull caption strings out of heterogeneous AlmostCrackd JSON shapes. */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function extractCaptions(json: any): string[] {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let candidates: any =
+    json?.captions ??
+    json?.data?.captions ??
+    json?.generated_captions ??
+    json?.results ??
+    json?.data ??
+    json?.caption_request?.captions ??
+    json?.captionRequest?.captions ??
+    json?.llm_responses ??
+    json?.llm_model_responses ??
+    json?.caption_requests ??
+    [];
+
+  if (
+    (!Array.isArray(candidates) || candidates.length === 0) &&
+    Array.isArray(json?.caption_requests)
+  ) {
+    candidates = json.caption_requests;
+  }
+
+  if (!Array.isArray(candidates)) return [];
+
+  return candidates
+    .map((item) => {
+      if (typeof item === "string") return item;
+      return (
+        item?.caption ??
+        item?.content ??
+        item?.text ??
+        item?.response ??
+        item?.output ??
+        item?.llm_response ??
+        item?.message ??
+        ""
+      );
+    })
+    .filter(Boolean)
+    .map((s: string) => s.trim())
+    .filter(Boolean)
+    .slice(0, 5);
+}
 
 export async function pipelinePost<T = unknown>(
   path: string,
@@ -41,6 +89,8 @@ export async function pipelinePost<T = unknown>(
   });
 
   const text = await res.text();
+  console.log("AlmostCrackd status:", res.status);
+  console.log("AlmostCrackd raw response:", text);
 
   if (res.status === 405) {
     return {
@@ -55,12 +105,7 @@ export async function pipelinePost<T = unknown>(
   try {
     json = text ? JSON.parse(text) : null;
   } catch {
-    return {
-      ok: false,
-      status: res.status,
-      endpoint,
-      message: `AlmostCrackd non-JSON response (${res.status}) at ${endpoint}: ${text.slice(0, 400)}`,
-    };
+    throw new Error(`AlmostCrackd returned non-JSON: ${text}`);
   }
 
   if (!res.ok) {
@@ -105,39 +150,41 @@ export async function uploadImageFromUrl(
   );
 }
 
+export type HumorFlavorMeta = {
+  id: string;
+  name: string | null;
+  description: string | null;
+};
+
 export async function generateCaptionsForImage(
   imageId: string,
   accessToken: string,
-  options?: { prompt?: string }
+  options?: {
+    prompt?: string;
+    humorFlavor?: HumorFlavorMeta;
+    steps?: HumorFlavorStep[];
+  }
 ) {
   const body: Record<string, unknown> = { imageId };
+
   if (options?.prompt?.trim()) {
     body.prompt = options.prompt.trim();
   }
-  return pipelinePost<unknown>("/pipeline/generate-captions", body, accessToken);
-}
 
-export function normalizePipelineCaptions(raw: unknown): string[] {
-  if (raw == null) return [];
-  if (Array.isArray(raw)) {
-    return raw.filter((x): x is string => typeof x === "string").map((s) => s.trim()).filter(Boolean);
+  if (options?.humorFlavor) {
+    body.humorFlavorId = options.humorFlavor.id;
+    body.flavorName = options.humorFlavor.name;
+    body.flavorDescription = options.humorFlavor.description;
   }
-  if (typeof raw === "object") {
-    const o = raw as Record<string, unknown>;
-    const arr = o.captions;
-    if (Array.isArray(arr)) {
-      return arr
-        .filter((x): x is string => typeof x === "string")
-        .map((s) => s.trim())
-        .filter(Boolean);
-    }
-    const results = o.results;
-    if (Array.isArray(results)) {
-      return results
-        .filter((x): x is string => typeof x === "string")
-        .map((s) => s.trim())
-        .filter(Boolean);
-    }
+
+  if (options?.steps?.length) {
+    body.steps = options.steps.map((s) => ({
+      order_by: s.order_by,
+      llm_system_prompt: s.llm_system_prompt,
+      llm_user_prompt: s.llm_user_prompt,
+      description: s.description,
+    }));
   }
-  return [];
+
+  return pipelinePost<unknown>("/pipeline/generate-captions", body, accessToken);
 }

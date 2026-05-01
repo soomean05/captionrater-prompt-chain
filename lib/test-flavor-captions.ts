@@ -3,8 +3,8 @@ import { listStepsForFlavor } from "@/lib/db/steps";
 import type { HumorFlavor } from "@/lib/db/flavors";
 import type { HumorFlavorStep } from "@/lib/db/steps";
 import {
+  extractCaptions,
   generateCaptionsForImage,
-  normalizePipelineCaptions,
   uploadImageFromUrl,
   type PipelinePostFailure,
 } from "@/lib/api/almostcrackd-pipeline";
@@ -88,6 +88,12 @@ export async function runAssignment5TestFlavorCaptions(input: {
   const orderedSteps = steps ?? [];
   const humorPrompt = buildHumorFlavorPrompt(flavor, orderedSteps);
 
+  const flavorMeta = {
+    id: flavor.id,
+    name: flavor.name,
+    description: flavor.description,
+  };
+
   const upload = await uploadImageFromUrl(
     imageUrl,
     input.accessToken,
@@ -97,7 +103,7 @@ export async function runAssignment5TestFlavorCaptions(input: {
     return {
       ok: false,
       error: failureMessage(upload),
-      status: upload.status === 405 ? 502 : 502,
+      status: 502,
     };
   }
 
@@ -112,9 +118,14 @@ export async function runAssignment5TestFlavorCaptions(input: {
 
   let gen = await generateCaptionsForImage(imageId, input.accessToken, {
     prompt: humorPrompt,
+    humorFlavor: flavorMeta,
+    steps: orderedSteps,
   });
   if (!gen.ok && gen.status === 400) {
-    gen = await generateCaptionsForImage(imageId, input.accessToken);
+    gen = await generateCaptionsForImage(imageId, input.accessToken, {
+      humorFlavor: flavorMeta,
+      steps: orderedSteps,
+    });
   }
   if (!gen.ok) {
     return {
@@ -124,16 +135,12 @@ export async function runAssignment5TestFlavorCaptions(input: {
     };
   }
 
-  let captions = normalizePipelineCaptions(gen.data);
-  if (captions.length > 5) {
-    captions = captions.slice(0, 5);
-  }
-  if (captions.length < 5) {
-    return {
-      ok: false,
-      error: `AlmostCrackd returned ${captions.length} captions; expected 5.`,
-      status: 502,
-    };
+  const captions = extractCaptions(gen.data);
+
+  if (captions.length === 0) {
+    throw new Error(
+      `AlmostCrackd returned 0 captions. Raw response: ${JSON.stringify(gen.data)}`
+    );
   }
 
   return { ok: true, captions };
