@@ -6,6 +6,7 @@ import {
   createFlavor,
   updateFlavor,
   deleteFlavor,
+  duplicateFlavor,
   slugify,
 } from "@/lib/db/flavors";
 import { createClient } from "@/lib/supabase/server";
@@ -53,4 +54,18 @@ export async function deleteFlavorAction(formData: FormData) {
   revalidatePath("/flavors");
   revalidatePath("/dashboard");
   redirect("/flavors");
+}
+
+export async function duplicateFlavorAction(formData: FormData) {
+  const id = String(formData.get("id") ?? "");
+  if (!id) return { error: "ID is required" };
+
+  const supabase = await createClient();
+  const userId = await getCurrentUserId(supabase);
+  const { data, error } = await duplicateFlavor({ id, userId });
+  if (error) return { error: error.message };
+
+  revalidatePath("/flavors");
+  revalidatePath("/dashboard");
+  redirect(`/flavors/${data?.id}`);
 }

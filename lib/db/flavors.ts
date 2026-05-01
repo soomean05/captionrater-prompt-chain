@@ -1,4 +1,5 @@
 import { createAdminClient } from "@/lib/supabase/admin";
+import { listStepsForFlavor, createStep } from "@/lib/db/steps";
 
 type FlavorNameColumn = "label" | "title" | "description";
 
@@ -26,6 +27,37 @@ export function slugify(value: string) {
     .replace(/[^a-z0-9-]/g, "")
     .replace(/-+/g, "-")
     .replace(/^-|-$/g, "");
+}
+
+type SupabaseLike = ReturnType<typeof createAdminClient>;
+
+export async function makeUniqueFlavorSlug(
+  supabase: SupabaseLike,
+  baseName: string
+) {
+  const baseSlug = slugify(baseName);
+
+  if (!baseSlug) {
+    throw new Error("Please enter a valid flavor name.");
+  }
+
+  const { data, error } = await supabase
+    .from("humor_flavors")
+    .select("slug")
+    .ilike("slug", `${baseSlug}%`);
+
+  if (error) throw error;
+
+  const existing = new Set((data ?? []).map((row) => row.slug));
+
+  if (!existing.has(baseSlug)) return baseSlug;
+
+  let i = 2;
+  while (existing.has(`${baseSlug}-${i}`)) {
+    i++;
+  }
+
+  return `${baseSlug}-${i}`;
 }
 
 async function detectFlavorNameColumn(): Promise<FlavorNameColumn> {
@@ -122,7 +154,7 @@ export async function createFlavor(input: {
 }) {
   const supabase = createAdminClient();
   const flavorNameColumn = await getFlavorNameColumn();
-  const slug = slugify(input.name);
+  const slug = await makeUniqueFlavorSlug(supabase, input.name);
   const { data, error } = await supabase
     .from("humor_flavors")
     .insert({
@@ -138,6 +170,37 @@ export async function createFlavor(input: {
     data: data ? mapFlavor(data as HumorFlavorRow, flavorNameColumn) : null,
     error,
   };
+}
+
+export async function duplicateFlavor(input: { id: string; userId: string }) {
+  const { data: original, error } = await getFlavor(input.id);
+  if (error) return { data: null, error };
+  if (!original) return { data: null, error: { message: "Flavor not found" } };
+
+  const duplicateName = `${original.name ?? "Flavor"} Copy`;
+  const { data: createdFlavor, error: createError } = await createFlavor({
+    name: duplicateName,
+    description: original.description ?? "",
+    userId: input.userId,
+  });
+  if (createError || !createdFlavor) {
+    return { data: null, error: createError ?? { message: "Failed to duplicate flavor" } };
+  }
+
+  const { data: steps, error: stepsError } = await listStepsForFlavor(input.id);
+  if (stepsError) return { data: createdFlavor, error: stepsError };
+
+  for (const step of steps ?? []) {
+    const { error: createStepError } = await createStep({
+      humor_flavor_id: createdFlavor.id,
+      orderValue: step.order_value ?? undefined,
+      content: step.content ?? "",
+      userId: input.userId,
+    });
+    if (createStepError) return { data: createdFlavor, error: createStepError };
+  }
+
+  return { data: createdFlavor, error: null };
 }
 
 export async function updateFlavor(

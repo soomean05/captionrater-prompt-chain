@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { deleteFlavorAction } from "./actions";
+import { deleteFlavorAction, duplicateFlavorAction } from "./actions";
 import type { HumorFlavor } from "@/lib/db/flavors";
 
 export function FlavorRow({ flavor }: { flavor: HumorFlavor }) {
@@ -26,6 +26,17 @@ export function FlavorRow({ flavor }: { flavor: HumorFlavor }) {
           >
             Edit
           </Link>
+          <form
+            action={async (fd) => {
+              await duplicateFlavorAction(fd);
+            }}
+            className="inline"
+          >
+            <input type="hidden" name="id" value={flavor.id} />
+            <button type="submit" className="btn-ghost">
+              Duplicate
+            </button>
+          </form>
           <form
             action={async (fd) => {
               await deleteFlavorAction(fd);
