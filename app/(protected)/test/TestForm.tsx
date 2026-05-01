@@ -32,6 +32,8 @@ export function TestForm({ flavors }: { flavors: HumorFlavor[] }) {
   const selectedFlavor =
     flavors.find((f) => f.id === selectedFlavorId) ?? null;
 
+  const previewSrc = filePreviewUrl ?? imageUrl;
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!selectedFlavorId) {
@@ -102,12 +104,13 @@ export function TestForm({ flavors }: { flavors: HumorFlavor[] }) {
     setPending(false);
   }
 
-  const previewSrc = filePreviewUrl ?? imageUrl;
-
   return (
-    <div className="mx-auto max-w-2xl space-y-8">
-      <section className="card-surface p-6">
-        <form onSubmit={handleSubmit} className="space-y-6">
+    <div className="grid gap-8 lg:grid-cols-2">
+      <section className="card-surface p-5">
+        <h2 className="mb-4 text-lg font-medium text-card-foreground">
+          Generate captions
+        </h2>
+        <form onSubmit={handleSubmit} className="space-y-4">
           <div>
             <label
               htmlFor="flavor_id"
@@ -130,14 +133,6 @@ export function TestForm({ flavors }: { flavors: HumorFlavor[] }) {
                 </option>
               ))}
             </select>
-            {selectedFlavor ? (
-              <p className="mt-3 text-sm text-card-foreground">
-                <span className="muted-text">Flavor:</span>{" "}
-                <span className="font-medium">
-                  {selectedFlavor.name ?? selectedFlavor.id}
-                </span>
-              </p>
-            ) : null}
           </div>
 
           <div>
@@ -158,7 +153,7 @@ export function TestForm({ flavors }: { flavors: HumorFlavor[] }) {
               className="input-base w-full"
             />
             <p className="mt-1 text-xs muted-text">
-              Or upload an image file below.
+              Or upload an image file below (presigned upload path).
             </p>
           </div>
 
@@ -182,7 +177,7 @@ export function TestForm({ flavors }: { flavors: HumorFlavor[] }) {
             />
           </div>
 
-          {(filePreviewUrl || imageUrl.trim()) ? (
+          {filePreviewUrl || imageUrl.trim() ? (
             <div>
               <p className="mb-2 text-sm font-medium text-card-foreground">
                 Image preview
@@ -191,7 +186,7 @@ export function TestForm({ flavors }: { flavors: HumorFlavor[] }) {
               <img
                 src={previewSrc}
                 alt="Selected test image"
-                className="max-h-52 w-full rounded-lg border border-border object-contain bg-muted/30"
+                className="max-h-48 w-full rounded-lg border border-border object-cover"
               />
             </div>
           ) : null}
@@ -206,36 +201,61 @@ export function TestForm({ flavors }: { flavors: HumorFlavor[] }) {
         </form>
       </section>
 
-      <section className="border-t border-border pt-10">
+      <section className="card-surface p-5">
+        <h2 className="mb-4 text-lg font-medium text-card-foreground">
+          Results
+        </h2>
         {result === null && !pending ? (
-          <p className="empty-state rounded-xl border border-dashed border-border p-8 text-center text-sm muted-text">
-            Generated captions will appear here.
+          <p className="empty-state p-6">
+            Submit the form to generate captions.
           </p>
+        ) : pending ? (
+          <p className="p-6 text-sm muted-text">Generating…</p>
         ) : result && !result.ok ? (
-          <div className="alert-error rounded-xl p-5">
-            {result.error}
-          </div>
+          <div className="alert-error p-6">{result.error}</div>
         ) : result && result.ok ? (
-          <div>
-            <p className="mb-4 text-sm font-medium text-card-foreground">
-              Generated captions
-            </p>
-            {result.captions?.length ? (
-              <ul className="divide-y divide-border rounded-xl border border-border bg-card overflow-hidden">
-                {result.captions.map((c, i) => (
-                  <li
-                    key={i}
-                    className="px-4 py-3 text-sm leading-relaxed text-card-foreground"
-                  >
-                    {c}
-                  </li>
-                ))}
-              </ul>
-            ) : (
-              <p className="text-sm text-muted-foreground">
-                No captions in response.
+          <div className="space-y-4">
+            {selectedFlavor ? (
+              <div>
+                <p className="text-sm font-medium text-card-foreground">
+                  Flavor: {selectedFlavor.name ?? selectedFlavor.id}
+                </p>
+              </div>
+            ) : null}
+            {previewSrc ? (
+              <div>
+                <p className="mb-2 text-sm font-medium text-card-foreground">
+                  Image preview
+                </p>
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={previewSrc}
+                  alt="Test image"
+                  className="max-h-48 rounded-lg border border-border object-cover"
+                />
+              </div>
+            ) : null}
+            <div>
+              <p className="mb-2 text-sm font-medium text-card-foreground">
+                Generated captions
               </p>
-            )}
+              {result.captions?.length ? (
+                <ul className="space-y-2">
+                  {result.captions.map((c, i) => (
+                    <li
+                      key={i}
+                      className="rounded-lg border border-border bg-background p-3 text-sm"
+                    >
+                      {c}
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="text-sm text-muted-foreground">
+                  No captions in response.
+                </p>
+              )}
+            </div>
           </div>
         ) : null}
       </section>
