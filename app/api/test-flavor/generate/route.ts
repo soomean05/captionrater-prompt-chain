@@ -10,8 +10,8 @@ function captionBackendOk(): boolean {
 /**
  * POST /api/test-flavor/generate
  *
- * JSON body: { humorFlavorId, imageUrl }
- * Or multipart/form-data: humorFlavorId, image (file) — Assignment 5 presigned PUT flow
+ * JSON body: { humorFlavorId, imageUrl, captionCount? }
+ * Or multipart/form-data: humorFlavorId, captionCount?, image (file)
  */
 export async function POST(request: Request) {
   if (!captionBackendOk()) {
@@ -44,10 +44,19 @@ export async function POST(request: Request) {
     let humorFlavorId: string;
     let multipartFile: File | null = null;
     let imageUrl = "";
+    let captionCount: number | undefined;
+
+    function parseCaptionCount(raw: unknown): number | undefined {
+      if (raw === undefined || raw === null) return undefined;
+      const n = Number.parseInt(String(raw).trim(), 10);
+      if (!Number.isFinite(n)) return undefined;
+      return Math.min(30, Math.max(1, n));
+    }
 
     if (contentTypeHdr.includes("multipart/form-data")) {
       const form = await request.formData();
       humorFlavorId = String(form.get("humorFlavorId") ?? "").trim();
+      captionCount = parseCaptionCount(form.get("captionCount"));
       const file = form.get("image");
       multipartFile = file instanceof File ? file : null;
 
@@ -64,6 +73,7 @@ export async function POST(request: Request) {
       const body = (await request.json()) as Record<string, unknown>;
       humorFlavorId = String(body.humorFlavorId ?? "").trim();
       imageUrl = String(body.imageUrl ?? "").trim();
+      captionCount = parseCaptionCount(body.captionCount);
 
       if (!humorFlavorId) {
         return Response.json({ error: "humorFlavorId is required." }, { status: 400 });
@@ -94,6 +104,7 @@ export async function POST(request: Request) {
       result = await runAssignment5TestFlavorCaptions({
         accessToken,
         humorFlavorId,
+        captionCount,
         imageFile: {
           buffer,
           contentType: multipartFile.type?.trim()
@@ -105,6 +116,7 @@ export async function POST(request: Request) {
       result = await runAssignment5TestFlavorCaptions({
         accessToken,
         humorFlavorId,
+        captionCount,
         imageUrl,
       });
     }

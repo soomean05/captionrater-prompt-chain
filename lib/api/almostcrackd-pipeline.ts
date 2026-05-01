@@ -75,16 +75,24 @@ export function normalizeCaption(item: unknown): string {
   if (typeof item === "string") return item;
 
   if (item && typeof item === "object") {
-    const record = item as {
-      content?: unknown;
-      caption?: unknown;
-      text?: unknown;
-      response?: unknown;
-    };
+    const record = item as Record<string, unknown>;
+
+    if (Array.isArray(record.captions) && record.captions.length > 0) {
+      const parts = record.captions
+        .map((c) =>
+          normalizeCaption(c).replace(/^["']|["']$/g, "").trim()
+        )
+        .filter(Boolean);
+      if (parts.length) return parts.join("\n\n");
+    }
 
     const value =
       record.content ??
       record.caption ??
+      record.generatedCaption ??
+      record.generated_text ??
+      record.output ??
+      record.value ??
       record.text ??
       record.response ??
       "";
@@ -95,14 +103,92 @@ export function normalizeCaption(item: unknown): string {
   return "";
 }
 
+function dedupePreserveOrder(lines: string[]): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const line of lines) {
+    const key = line.toLowerCase().replace(/\s+/g, " ").trim();
+    if (!key || seen.has(key)) continue;
+    seen.add(key);
+    out.push(line);
+  }
+  return out;
+}
+
+function stripBulletPrefix(line: string): string {
+  return line.replace(/^(\d+[.)]\s+|[-*•]+\s+)/, "").trim();
+}
+
+/** Split a single caption blob into multiple captions (APIs often return one newline-/bullet-separated string). */
+export function expandCompositeCaptionStrings(strings: string[]): string[] {
+  const out: string[] = [];
+
+  for (const raw of strings) {
+    const bare = raw.replace(/^["']|["']$/g, "").trim();
+    if (!bare) continue;
+
+    if (bare.startsWith("[") && bare.endsWith("]")) {
+      try {
+        const parsed = JSON.parse(bare) as unknown;
+        if (Array.isArray(parsed)) {
+          for (const el of parsed) {
+            const t = normalizeCaption(el).replace(/^["']|["']$/g, "").trim();
+            if (t) out.push(...expandCompositeCaptionStrings([t]));
+          }
+          continue;
+        }
+      } catch {
+        /* treat as literal text */
+      }
+    }
+
+    const paragraphs = bare.split(/\n\s*\n/).map((p) => p.trim()).filter(Boolean);
+    if (paragraphs.length > 1) {
+      out.push(...expandCompositeCaptionStrings(paragraphs));
+      continue;
+    }
+
+    const block = paragraphs[0] ?? bare;
+    const rawLines = block.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+    if (rawLines.length <= 1) {
+      out.push(block.trim());
+      continue;
+    }
+
+    const listLikeCount = rawLines.filter((ln) =>
+      /^(\d+[.)]\s+|[-*•]\s+)/.test(ln)
+    ).length;
+    const shortLinesOk = rawLines.every((ln) => ln.length <= 360);
+
+    if (
+      rawLines.length >= 2 &&
+      (listLikeCount >= 2 || listLikeCount >= Math.ceil(rawLines.length * 0.5))
+    ) {
+      out.push(...rawLines.map(stripBulletPrefix).filter(Boolean));
+      continue;
+    }
+
+    if (rawLines.length >= 2 && rawLines.length <= 12 && shortLinesOk) {
+      const stripped = rawLines.map(stripBulletPrefix);
+      out.push(...stripped.filter(Boolean));
+      continue;
+    }
+
+    out.push(block.trim());
+  }
+
+  return dedupePreserveOrder(out);
+}
+
 /** Normalize AlmostCrackd caption records to display strings (never call .replace on raw objects). */
 export function captionsFromRecords(rawCaptions: unknown[]): string[] {
-  return rawCaptions
+  const strings = rawCaptions
     .map(normalizeCaption)
     .map((caption) =>
       caption.replace(/^["']|["']$/g, "").trim()
     )
     .filter(Boolean);
+  return expandCompositeCaptionStrings(strings);
 }
 
 /**
@@ -136,6 +222,8 @@ function unwrapCaptionRawNodes(root: unknown, out: unknown[]): void {
     "variants",
     "choices",
     "outputs",
+    "responses",
+    "messages",
     "suggestions",
     "items",
     "list",
@@ -312,21 +400,37 @@ export function humorFlavorIdForAlmostCrackd(
 }
 
 /**
- * Step 4 — ONLY { imageId, humorFlavorId }. No prompts, steps, imageUrl, etc.
+ * Step 4 — { imageId, humorFlavorId } plus optional hints many APIs accept (safely omitted when unset).
  */
 export async function requestGenerateCaptions(
   accessToken: string,
-  params: { imageId: string; humorFlavorId: string | number }
+  params: {
+    imageId: string;
+    humorFlavorId: string | number;
+    /** Requested caption count — sent as `count`/`numCaptions` when greater than 1. */
+    captionCount?: number;
+  }
 ): Promise<PipelinePostSuccess<unknown> | PipelinePostFailure> {
   const baseUrl = getAlmostCrackdApiBase();
   const endpoint = `${baseUrl}/pipeline/generate-captions`;
 
   const imageId = params.imageId.trim();
 
-  const generatePayload = {
+  const generatePayload: Record<string, unknown> = {
     imageId,
     humorFlavorId: humorFlavorIdForAlmostCrackd(params.humorFlavorId),
   };
+
+  if (
+    typeof params.captionCount === "number" &&
+    Number.isFinite(params.captionCount)
+  ) {
+    const n = Math.min(
+      30,
+      Math.max(1, Math.floor(params.captionCount))
+    );
+    if (n > 1) generatePayload.count = n;
+  }
 
   if (!generatePayload.imageId) {
     throw new Error("Missing imageId before generate-captions.");

@@ -25,6 +25,8 @@ export async function runAssignment5TestFlavorCaptions(input: {
   imageUrl?: string;
   /** Optional file — presigned → PUT → register with returned cdnUrl */
   imageFile?: { buffer: Buffer; contentType: string };
+  /** Optional — forwarded as `count` when greater than 1 on generate-captions */
+  captionCount?: number;
 }): Promise<
   | { ok: true; captions: string[] }
   | { ok: false; error: string; status: number }
@@ -112,6 +114,7 @@ export async function runAssignment5TestFlavorCaptions(input: {
   const gen = await requestGenerateCaptions(input.accessToken, {
     imageId,
     humorFlavorId: flavor.id,
+    captionCount: input.captionCount,
   });
 
   if (!gen.ok) {
