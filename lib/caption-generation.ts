@@ -1,6 +1,6 @@
 import { getFlavor } from "@/lib/db/flavors";
 import { listStepsForFlavor } from "@/lib/db/steps";
-import { generateCaptions } from "@/lib/api/almostcrackd";
+import { generateCaptionsForBackend } from "@/lib/api/generate-captions-dispatch";
 import type { HumorFlavor } from "@/lib/db/flavors";
 import type { HumorFlavorStep } from "@/lib/db/steps";
 
@@ -10,6 +10,16 @@ function stepTextFromRow(step: Record<string, unknown>): string {
     (step.description as string) ??
     ""
   );
+}
+
+function compositeSystemPromptFromSteps(
+  steps: HumorFlavorStep[]
+): string | undefined {
+  const parts = steps
+    .map((s) => s.llm_system_prompt?.trim())
+    .filter((x): x is string => Boolean(x?.length));
+  if (!parts.length) return undefined;
+  return parts.join("\n\n");
 }
 
 export type CaptionGenerationSuccess = {
@@ -55,10 +65,14 @@ export async function runCaptionGenerationForTest(input: {
   );
   const prompt = stepContents.filter(Boolean).join("\n\n");
 
-  const { data, error } = await generateCaptions({
+  const compositeSystem = compositeSystemPromptFromSteps(steps ?? []);
+  const { data, error } = await generateCaptionsForBackend({
     imageUrl,
     prompt: prompt || undefined,
     steps: stepContents.some(Boolean) ? stepContents : undefined,
+    ...(compositeSystem
+      ? { compositeSystemPrompt: compositeSystem }
+      : {}),
   });
 
   if (error) {

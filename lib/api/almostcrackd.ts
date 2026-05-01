@@ -1,57 +1,19 @@
 /**
  * Caption API client — configured via ALMOSTCRACKD_* env vars.
- * Upstream Nitro servers return 405 bodies like "Method post is not allowed on this route"
- * when POST hits a route that doesn't exist or only allows GET — often a wrong base URL or path.
+ *
+ * NOTE: api.almostcrackd.ai often responds with Nitro “Method POST is not allowed on this route”
+ * on every guessed path—that host may not expose a public caption POST surface. Prefer
+ * CAPTION_BACKEND=openai plus OPENAI_API_KEY for local/demo, or set ALMOSTCRACKD_ENDPOINT
+ * once AlmostCrackd gives you their real POST URL.
  */
 
+import type {
+  GenerateCaptionsInput,
+  GenerateCaptionsResult,
+} from "@/lib/api/caption-types";
+import { normalizeCaptions } from "@/lib/api/caption-types";
+
 const BASE_URL = "https://api.almostcrackd.ai";
-
-export type GenerateCaptionsInput = {
-  imageUrl?: string;
-  imageBase64?: string;
-  prompt?: string;
-  steps?: string[];
-};
-
-export type GenerateCaptionsResult = {
-  captions: string[];
-  raw?: unknown;
-};
-
-function normalizeCaptions(raw: unknown): string[] {
-  if (Array.isArray(raw)) {
-    return raw
-      .map((item) => {
-        if (typeof item === "string") return item;
-        if (item && typeof item === "object") {
-          const obj = item as Record<string, unknown>;
-          return (
-            (obj.content as string) ??
-            (obj.caption as string) ??
-            (obj.text as string) ??
-            (obj.captions as string)?.[0] ??
-            ""
-          );
-        }
-        return "";
-      })
-      .filter(Boolean);
-  }
-  if (raw && typeof raw === "object") {
-    const obj = raw as Record<string, unknown>;
-    const arr =
-      (obj.captions as string[]) ??
-      (obj.content as string[]) ??
-      (obj.results as string[]);
-    if (Array.isArray(arr)) return arr.filter((s) => typeof s === "string");
-    const single =
-      (obj.content as string) ??
-      (obj.caption as string) ??
-      (obj.text as string);
-    if (typeof single === "string") return [single];
-  }
-  return [];
-}
 
 function mergeErrorBody(
   json: unknown,
@@ -146,7 +108,6 @@ export async function generateCaptions(
   const candidates = computeCaptionPostUrls();
   const tryNextOn = new Set([404, 405]);
   let lastMsg = "";
-  let lastStatus = 0;
 
   try {
     for (const endpoint of candidates) {
@@ -165,7 +126,6 @@ export async function generateCaptions(
           lastMsg = text?.length
             ? `API error ${res.status}: ${text.slice(0, 280)}`
             : `${res.status} ${res.statusText}`;
-          lastStatus = res.status;
           if (tryNextOn.has(res.status)) continue;
           return { error: `${lastMsg} (POST ${endpoint})` };
         }
@@ -175,7 +135,6 @@ export async function generateCaptions(
       if (!res.ok) {
         const err = mergeErrorBody(json, text, res.status, res.statusText);
         lastMsg = String(err);
-        lastStatus = res.status;
         if (tryNextOn.has(res.status)) continue;
         return { error: `${lastMsg} (POST ${endpoint})` };
       }
@@ -190,7 +149,7 @@ export async function generateCaptions(
     }
 
     return {
-      error: `${lastMsg || "Caption API rejected every URL tried."} Tried URLs: ${candidates.join(", ")}. Set ALMOSTCRACKD_ENDPOINT to the exact POST endpoint, or fix ALMOSTCRACKD_API_URL (use api.almostcrackd.ai, not almostcrackd.ai).`,
+      error: `${lastMsg || "Caption API rejected every URL tried."} Tried URLs: ${candidates.join(", ")}. If every path returns POST 405, api.almostcrackd.ai may not expose public caption POST—set CAPTION_BACKEND=openai and OPENAI_API_KEY, or ALMOSTCRACKD_ENDPOINT from AlmostCrackd’s docs.`,
     };
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
