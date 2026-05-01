@@ -20,7 +20,6 @@ type StepColumns = {
   hasCreatedByUserId: boolean;
   hasModifiedByUserId: boolean;
 };
-let stepColumnsPromise: Promise<StepColumns> | null = null;
 
 async function columnExists(table: string, column: string) {
   const supabase = createAdminClient();
@@ -29,53 +28,48 @@ async function columnExists(table: string, column: string) {
 }
 
 async function getStepColumns(): Promise<StepColumns> {
-  if (!stepColumnsPromise) {
-    stepColumnsPromise = (async () => {
-      const contentCandidates: StepColumns["contentColumn"][] = [
-        "prompt",
-        "instruction",
-        "step_text",
-        "system_prompt",
-        "user_prompt",
-        "text",
-      ];
-      let contentColumn: StepColumns["contentColumn"] = "prompt";
-      for (const candidate of contentCandidates) {
-        if (await columnExists("humor_flavor_steps", candidate)) {
-          contentColumn = candidate;
-          break;
-        }
-      }
-      const orderCandidates: Exclude<StepColumns["orderColumn"], null>[] = [
-        "order_index",
-        "sort_order",
-        "position",
-        "step_order",
-        "sequence",
-      ];
-      let orderColumn: StepColumns["orderColumn"] = null;
-      for (const candidate of orderCandidates) {
-        if (await columnExists("humor_flavor_steps", candidate)) {
-          orderColumn = candidate;
-          break;
-        }
-      }
-
-      return {
-        contentColumn,
-        orderColumn,
-        hasCreatedByUserId: await columnExists(
-          "humor_flavor_steps",
-          "created_by_user_id"
-        ),
-        hasModifiedByUserId: await columnExists(
-          "humor_flavor_steps",
-          "modified_by_user_id"
-        ),
-      };
-    })();
+  const contentCandidates: StepColumns["contentColumn"][] = [
+    "prompt",
+    "instruction",
+    "step_text",
+    "system_prompt",
+    "user_prompt",
+    "text",
+  ];
+  let contentColumn: StepColumns["contentColumn"] = "prompt";
+  for (const candidate of contentCandidates) {
+    if (await columnExists("humor_flavor_steps", candidate)) {
+      contentColumn = candidate;
+      break;
+    }
   }
-  return stepColumnsPromise;
+  const orderCandidates: Exclude<StepColumns["orderColumn"], null>[] = [
+    "order_index",
+    "sort_order",
+    "position",
+    "step_order",
+    "sequence",
+  ];
+  let orderColumn: StepColumns["orderColumn"] = null;
+  for (const candidate of orderCandidates) {
+    if (await columnExists("humor_flavor_steps", candidate)) {
+      orderColumn = candidate;
+      break;
+    }
+  }
+
+  return {
+    contentColumn,
+    orderColumn,
+    hasCreatedByUserId: await columnExists(
+      "humor_flavor_steps",
+      "created_by_user_id"
+    ),
+    hasModifiedByUserId: await columnExists(
+      "humor_flavor_steps",
+      "modified_by_user_id"
+    ),
+  };
 }
 
 export async function listStepsForFlavor(flavorId: string) {
