@@ -3,7 +3,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 export type HumorFlavorStep = {
   id: string;
   humor_flavor_id: string;
-  step_number: number;
+  order_value: number | null;
   content: string | null;
   created_datetime_utc?: string | null;
 };
@@ -11,6 +11,7 @@ export type HumorFlavorStep = {
 const contentKey = "content";
 type StepColumns = {
   contentColumn: "content" | "prompt" | "text" | "instruction";
+  orderColumn: "order_index" | "sort_order" | "position" | "step_order" | "sequence" | null;
   hasCreatedByUserId: boolean;
   hasModifiedByUserId: boolean;
 };
@@ -38,9 +39,24 @@ async function getStepColumns(): Promise<StepColumns> {
           break;
         }
       }
+      const orderCandidates: Exclude<StepColumns["orderColumn"], null>[] = [
+        "order_index",
+        "sort_order",
+        "position",
+        "step_order",
+        "sequence",
+      ];
+      let orderColumn: StepColumns["orderColumn"] = null;
+      for (const candidate of orderCandidates) {
+        if (await columnExists("humor_flavor_steps", candidate)) {
+          orderColumn = candidate;
+          break;
+        }
+      }
 
       return {
         contentColumn,
+        orderColumn,
         hasCreatedByUserId: await columnExists(
           "humor_flavor_steps",
           "created_by_user_id"
@@ -57,12 +73,23 @@ async function getStepColumns(): Promise<StepColumns> {
 
 export async function listStepsForFlavor(flavorId: string) {
   const supabase = createAdminClient();
-  const { data, error } = await supabase
+  const columns = await getStepColumns();
+  let q = supabase
     .from("humor_flavor_steps")
     .select("*")
-    .eq("humor_flavor_id", flavorId)
-    .order("step_number", { ascending: true });
-  return { data: (data ?? []) as HumorFlavorStep[], error };
+    .eq("humor_flavor_id", flavorId);
+  q = columns.orderColumn
+    ? q.order(columns.orderColumn, { ascending: true })
+    : q.order("created_datetime_utc", { ascending: true });
+  const { data, error } = await q;
+  const mapped = ((data ?? []) as Record<string, unknown>[]).map((row) => ({
+    ...(row as HumorFlavorStep),
+    order_value: columns.orderColumn
+      ? ((row[columns.orderColumn] as number | null | undefined) ?? null)
+      : null,
+    content: getContentFromRow(row),
+  })) as HumorFlavorStep[];
+  return { data: mapped, error };
 }
 
 export async function getStep(id: string) {
@@ -87,7 +114,7 @@ function getContentFromRow(row: Record<string, unknown>): string {
 
 export async function createStep(input: {
   humor_flavor_id: string;
-  step_number: number;
+  orderValue?: number;
   content: string;
   userId: string;
 }) {
@@ -95,9 +122,11 @@ export async function createStep(input: {
   const columns = await getStepColumns();
   const insertPayload: Record<string, unknown> = {
     humor_flavor_id: input.humor_flavor_id,
-    step_number: input.step_number,
     [columns.contentColumn]: input.content,
   };
+  if (columns.orderColumn && input.orderValue != null) {
+    insertPayload[columns.orderColumn] = input.orderValue;
+  }
   if (columns.hasCreatedByUserId) insertPayload.created_by_user_id = input.userId;
   if (columns.hasModifiedByUserId) insertPayload.modified_by_user_id = input.userId;
 
@@ -116,12 +145,14 @@ export async function createStep(input: {
 
 export async function updateStep(
   id: string,
-  input: { step_number?: number; content?: string; userId?: string }
+  input: { orderValue?: number; content?: string; userId?: string }
 ) {
   const supabase = createAdminClient();
   const columns = await getStepColumns();
   const updatePayload: Record<string, unknown> = {};
-  if (input.step_number != null) updatePayload.step_number = input.step_number;
+  if (columns.orderColumn && input.orderValue != null) {
+    updatePayload[columns.orderColumn] = input.orderValue;
+  }
   if (input.content != null) updatePayload[columns.contentColumn] = input.content;
   if (input.userId && columns.hasModifiedByUserId) {
     updatePayload.modified_by_user_id = input.userId;
@@ -152,6 +183,10 @@ export async function reorderStep(
   direction: "up" | "down"
 ): Promise<{ error: { message: string } | null }> {
   const supabase = createAdminClient();
+  const columns = await getStepColumns();
+  if (!columns.orderColumn) {
+    return { error: { message: "Step ordering is not supported by this schema" } };
+  }
   const { data: step, error: stepErr } = await getStep(id);
   if (stepErr || !step) return { error: stepErr ?? { message: "Step not found" } };
 
@@ -167,18 +202,18 @@ export async function reorderStep(
   if (swapIdx < 0 || swapIdx >= steps.length) return { error: null };
 
   const otherStep = steps[swapIdx];
-  const currentNum = step.step_number ?? idx;
-  const otherNum = otherStep.step_number ?? swapIdx;
+  const currentNum = step.order_value ?? idx;
+  const otherNum = otherStep.order_value ?? swapIdx;
 
   const { error: u1 } = await supabase
     .from("humor_flavor_steps")
-    .update({ step_number: otherNum })
+    .update({ [columns.orderColumn]: otherNum })
     .eq("id", id);
   if (u1) return { error: u1 };
 
   const { error: u2 } = await supabase
     .from("humor_flavor_steps")
-    .update({ step_number: currentNum })
+    .update({ [columns.orderColumn]: currentNum })
     .eq("id", otherStep.id);
   if (u2) return { error: u2 };
 

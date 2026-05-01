@@ -53,11 +53,13 @@ export async function createStepAction(formData: FormData) {
   const userId = await getCurrentUserId(supabase);
 
   const { data: steps } = await listStepsForFlavor(flavorId);
-  const nextNum = steps?.length ? Math.max(...steps.map((s) => s.step_number ?? 0)) + 1 : 1;
+  const nextOrderValue = steps?.length
+    ? Math.max(...steps.map((s) => s.order_value ?? 0)) + 1
+    : 1;
 
   const { error } = await createStep({
     humor_flavor_id: flavorId,
-    step_number: nextNum,
+    orderValue: nextOrderValue,
     content,
     userId,
   });
