@@ -16,7 +16,7 @@ function failureMessage(f: PipelinePostFailure): string {
 
 /**
  * Assignment 5: register image (presigned flow or direct imageUrl),
- * then generate-captions with { imageId, humorFlavorId } only.
+ * then generate-captions with ONLY { imageId, humorFlavorId: number }.
  */
 export async function runAssignment5TestFlavorCaptions(input: {
   accessToken: string;

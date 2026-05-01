@@ -6,11 +6,11 @@
  *   1. POST /pipeline/generate-presigned-url { contentType }
  *   2. PUT presigned URL (bytes, Content-Type: file.type)
  *   3. POST /pipeline/upload-image-from-url { imageUrl: cdnUrl, isCommonUse: false }
- *   4. POST /pipeline/generate-captions { imageId, humorFlavorId }
+ *   4. POST /pipeline/generate-captions body: JSON.stringify({ imageId, humorFlavorId: Number(...) })
  *
  * Flow B — public URL only (Test page):
  *   POST /pipeline/upload-image-from-url { imageUrl, isCommonUse: false }
- *   POST /pipeline/generate-captions { imageId, humorFlavorId }
+ *   POST /pipeline/generate-captions — only imageId + numeric humorFlavorId
  */
 
 export function getAlmostCrackdApiBase(): string {
@@ -205,34 +205,41 @@ export function imageIdFromRegisterResponse(data: unknown): string | undefined {
 }
 
 /**
- * Step 4 — captions only use imageId + humorFlavorId (AlmostCrackd loads flavor/steps).
+ * Step 4 — ONLY { imageId, humorFlavorId: number }. No prompts, steps, or image URLs.
  */
 export async function requestGenerateCaptions(
   accessToken: string,
-  params: { imageId: string; humorFlavorId: string }
+  params: { imageId: string; humorFlavorId: string | number }
 ): Promise<PipelinePostSuccess<unknown> | PipelinePostFailure> {
   const baseUrl = getAlmostCrackdApiBase();
   const endpoint = `${baseUrl}/pipeline/generate-captions`;
 
-  const payload = {
-    imageId: params.imageId,
-    humorFlavorId: params.humorFlavorId,
+  const imageId = params.imageId;
+  const humorFlavorId = params.humorFlavorId;
+
+  const generatePayload = {
+    imageId,
+    humorFlavorId: Number(humorFlavorId),
   };
 
-  console.log("generate-captions payload object:", payload);
-  console.log(
-    "generate-captions payload JSON:",
-    JSON.stringify(payload, null, 2)
-  );
+  if (!generatePayload.imageId) {
+    throw new Error("Missing imageId before generate-captions.");
+  }
 
-  const res = await fetch(endpoint, {
+  if (!generatePayload.humorFlavorId) {
+    throw new Error("Missing humorFlavorId before generate-captions.");
+  }
+
+  console.log("FINAL generate-captions payload:", generatePayload);
+
+  const captionsRes = await fetch(endpoint, {
     method: "POST",
     headers: {
-      "Content-Type": "application/json",
       Authorization: `Bearer ${accessToken}`,
+      "Content-Type": "application/json",
     },
-    body: JSON.stringify(payload),
+    body: JSON.stringify(generatePayload),
   });
 
-  return finalizeAlmostCrackdFetch(res, endpoint);
+  return finalizeAlmostCrackdFetch(captionsRes, endpoint);
 }
