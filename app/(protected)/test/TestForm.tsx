@@ -55,10 +55,24 @@ export function TestForm({ flavors }: { flavors: HumorFlavor[] }) {
       if (!res.ok) {
         setResult({ error: String(json.error ?? "Request failed") });
       } else {
+        const flavorRaw = json.flavor as Record<string, unknown> | undefined;
         setResult({
           captions: Array.isArray(json.captions)
             ? (json.captions as string[])
             : [],
+          imageUrl:
+            typeof json.imageUrl === "string"
+              ? json.imageUrl
+              : imageUrl || undefined,
+          flavor: flavorRaw
+            ? {
+                id: String(flavorRaw.id ?? ""),
+                name: (flavorRaw.name as string) ?? undefined,
+              }
+            : undefined,
+          steps: Array.isArray(json.steps)
+            ? (json.steps as (HumorFlavorStep | Record<string, unknown>)[])
+            : undefined,
           body: json.body,
         });
       }
