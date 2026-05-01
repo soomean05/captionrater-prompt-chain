@@ -9,6 +9,51 @@ export type HumorFlavorStep = {
 };
 
 const contentKey = "content";
+type StepColumns = {
+  contentColumn: "content" | "prompt" | "text" | "instruction";
+  hasCreatedByUserId: boolean;
+  hasModifiedByUserId: boolean;
+};
+let stepColumnsPromise: Promise<StepColumns> | null = null;
+
+async function columnExists(table: string, column: string) {
+  const supabase = createAdminClient();
+  const { error } = await supabase.from(table).select(`id,${column}`).limit(1);
+  return !error;
+}
+
+async function getStepColumns(): Promise<StepColumns> {
+  if (!stepColumnsPromise) {
+    stepColumnsPromise = (async () => {
+      const contentCandidates: StepColumns["contentColumn"][] = [
+        "content",
+        "prompt",
+        "text",
+        "instruction",
+      ];
+      let contentColumn: StepColumns["contentColumn"] = "content";
+      for (const candidate of contentCandidates) {
+        if (await columnExists("humor_flavor_steps", candidate)) {
+          contentColumn = candidate;
+          break;
+        }
+      }
+
+      return {
+        contentColumn,
+        hasCreatedByUserId: await columnExists(
+          "humor_flavor_steps",
+          "created_by_user_id"
+        ),
+        hasModifiedByUserId: await columnExists(
+          "humor_flavor_steps",
+          "modified_by_user_id"
+        ),
+      };
+    })();
+  }
+  return stepColumnsPromise;
+}
 
 export async function listStepsForFlavor(flavorId: string) {
   const supabase = createAdminClient();
@@ -44,29 +89,17 @@ export async function createStep(input: {
   humor_flavor_id: string;
   step_number: number;
   content: string;
+  userId: string;
 }) {
   const supabase = createAdminClient();
+  const columns = await getStepColumns();
   const insertPayload: Record<string, unknown> = {
     humor_flavor_id: input.humor_flavor_id,
     step_number: input.step_number,
+    [columns.contentColumn]: input.content,
   };
-  const { data: schemaData } = await supabase
-    .from("humor_flavor_steps")
-    .select("*")
-    .limit(1)
-    .maybeSingle();
-  const columns = schemaData ? Object.keys(schemaData) : [];
-  if (columns.includes("content")) {
-    insertPayload.content = input.content;
-  } else if (columns.includes("prompt")) {
-    insertPayload.prompt = input.content;
-  } else if (columns.includes("text")) {
-    insertPayload.text = input.content;
-  } else if (columns.includes("instruction")) {
-    insertPayload.instruction = input.content;
-  } else {
-    insertPayload.content = input.content;
-  }
+  if (columns.hasCreatedByUserId) insertPayload.created_by_user_id = input.userId;
+  if (columns.hasModifiedByUserId) insertPayload.modified_by_user_id = input.userId;
 
   const { data, error } = await supabase
     .from("humor_flavor_steps")
@@ -83,24 +116,15 @@ export async function createStep(input: {
 
 export async function updateStep(
   id: string,
-  input: { step_number?: number; content?: string }
+  input: { step_number?: number; content?: string; userId?: string }
 ) {
   const supabase = createAdminClient();
+  const columns = await getStepColumns();
   const updatePayload: Record<string, unknown> = {};
   if (input.step_number != null) updatePayload.step_number = input.step_number;
-  if (input.content != null) {
-    const { data: schemaData } = await supabase
-      .from("humor_flavor_steps")
-      .select("*")
-      .limit(1)
-      .maybeSingle();
-    const columns = schemaData ? Object.keys(schemaData) : [];
-    if (columns.includes("content")) updatePayload.content = input.content;
-    else if (columns.includes("prompt")) updatePayload.prompt = input.content;
-    else if (columns.includes("text")) updatePayload.text = input.content;
-    else if (columns.includes("instruction"))
-      updatePayload.instruction = input.content;
-    else updatePayload.content = input.content;
+  if (input.content != null) updatePayload[columns.contentColumn] = input.content;
+  if (input.userId && columns.hasModifiedByUserId) {
+    updatePayload.modified_by_user_id = input.userId;
   }
 
   const { data, error } = await supabase

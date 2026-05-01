@@ -118,6 +118,7 @@ export async function getFlavor(id: string) {
 export async function createFlavor(input: {
   name: string;
   description?: string;
+  userId: string;
 }) {
   const supabase = createAdminClient();
   const flavorNameColumn = await getFlavorNameColumn();
@@ -126,6 +127,8 @@ export async function createFlavor(input: {
     .from("humor_flavors")
     .insert({
       [flavorNameColumn]: input.name,
+      created_by_user_id: input.userId,
+      modified_by_user_id: input.userId,
       slug,
       description: input.description ?? null,
     })
@@ -139,12 +142,16 @@ export async function createFlavor(input: {
 
 export async function updateFlavor(
   id: string,
-  input: { name?: string; description?: string }
+  input: { name?: string; description?: string; userId: string }
 ) {
   const supabase = createAdminClient();
   const flavorNameColumn = await getFlavorNameColumn();
   const payload: { description?: string | null; [key: string]: unknown } = {};
-  if (input.name !== undefined) payload[flavorNameColumn] = input.name;
+  payload.modified_by_user_id = input.userId;
+  if (input.name !== undefined) {
+    payload[flavorNameColumn] = input.name;
+    payload.slug = slugify(input.name);
+  }
   if (input.description !== undefined) payload.description = input.description;
   const { data, error } = await supabase
     .from("humor_flavors")

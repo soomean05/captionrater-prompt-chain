@@ -14,6 +14,8 @@ import {
   reorderStep,
   listStepsForFlavor,
 } from "@/lib/db/steps";
+import { createClient } from "@/lib/supabase/server";
+import { getCurrentUserId } from "@/lib/supabase/current-user";
 
 export async function updateFlavorAction(formData: FormData) {
   const id = String(formData.get("id") ?? "");
@@ -21,8 +23,10 @@ export async function updateFlavorAction(formData: FormData) {
   const description = String(formData.get("description") ?? "").trim();
   if (!id) return { error: "ID is required" };
   if (!name) return { error: "Name is required" };
+  const supabase = await createClient();
+  const userId = await getCurrentUserId(supabase);
 
-  const { error } = await updateFlavor(id, { name, description });
+  const { error } = await updateFlavor(id, { name, description, userId });
   if (error) return { error: error.message };
   revalidatePath("/flavors");
   revalidatePath(`/flavors/${id}`);
@@ -45,6 +49,8 @@ export async function createStepAction(formData: FormData) {
   const content = String(formData.get("content") ?? "").trim();
   if (!flavorId) return { error: "Flavor ID is required" };
   if (!content) return { error: "Content is required" };
+  const supabase = await createClient();
+  const userId = await getCurrentUserId(supabase);
 
   const { data: steps } = await listStepsForFlavor(flavorId);
   const nextNum = steps?.length ? Math.max(...steps.map((s) => s.step_number ?? 0)) + 1 : 1;
@@ -53,6 +59,7 @@ export async function createStepAction(formData: FormData) {
     humor_flavor_id: flavorId,
     step_number: nextNum,
     content,
+    userId,
   });
   if (error) return { error: error.message };
   revalidatePath(`/flavors/${flavorId}`);
@@ -63,8 +70,10 @@ export async function updateStepAction(formData: FormData) {
   const content = String(formData.get("content") ?? "").trim();
   const flavorId = String(formData.get("humor_flavor_id") ?? "");
   if (!id) return { error: "ID is required" };
+  const supabase = await createClient();
+  const userId = await getCurrentUserId(supabase);
 
-  const { error } = await updateStep(id, { content });
+  const { error } = await updateStep(id, { content, userId });
   if (error) return { error: error.message };
   revalidatePath(`/flavors/${flavorId}`);
 }
