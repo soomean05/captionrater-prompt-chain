@@ -8,7 +8,9 @@ function captionBackendOk(): boolean {
 
 /**
  * POST /api/test-flavor/generate
- * Body: { humorFlavorId, imageUrl }
+ *
+ * JSON body: { humorFlavorId, imageUrl }
+ * Or multipart/form-data: humorFlavorId, image (file) — Assignment 5 presigned PUT flow
  */
 export async function POST(request: Request) {
   if (!captionBackendOk()) {
@@ -22,10 +24,6 @@ export async function POST(request: Request) {
   }
 
   try {
-    const body = (await request.json()) as Record<string, unknown>;
-    const humorFlavorId = String(body.humorFlavorId ?? "").trim();
-    const imageUrl = String(body.imageUrl ?? "").trim();
-
     const supabase = await createClient();
     const {
       data: { session },
@@ -39,11 +37,45 @@ export async function POST(request: Request) {
       );
     }
 
-    const result = await runAssignment5TestFlavorCaptions({
-      accessToken: session.access_token,
-      humorFlavorId,
-      imageUrl,
-    });
+    const accessToken = session.access_token;
+    const contentTypeHdr = request.headers.get("content-type") ?? "";
+
+    let result;
+
+    if (contentTypeHdr.includes("multipart/form-data")) {
+      const form = await request.formData();
+      const humorFlavorId = String(form.get("humorFlavorId") ?? "").trim();
+      const file = form.get("image");
+
+      if (!(file instanceof File) || file.size === 0) {
+        return Response.json(
+          { error: "Multipart request must include a non-empty image file." },
+          { status: 400 }
+        );
+      }
+
+      const buffer = Buffer.from(await file.arrayBuffer());
+      result = await runAssignment5TestFlavorCaptions({
+        accessToken,
+        humorFlavorId,
+        imageFile: {
+          buffer,
+          contentType: file.type?.trim()
+            ? file.type
+            : "application/octet-stream",
+        },
+      });
+    } else {
+      const body = (await request.json()) as Record<string, unknown>;
+      const humorFlavorId = String(body.humorFlavorId ?? "").trim();
+      const imageUrl = String(body.imageUrl ?? "").trim();
+
+      result = await runAssignment5TestFlavorCaptions({
+        accessToken,
+        humorFlavorId,
+        imageUrl,
+      });
+    }
 
     if (!result.ok) {
       return Response.json(

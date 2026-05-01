@@ -1,13 +1,17 @@
 /**
- * Assignment 5 AlmostCrackd REST pipeline (from production client at almostcrackd.ai):
- * - POST /pipeline/generate-presigned-url  { contentType }
- * - POST /pipeline/upload-image-from-url   { imageUrl, isCommonUse? }  → { imageId }
- * - POST /pipeline/generate-captions      JSON body via JSON.stringify({ image_id, humor_flavor_id, num_captions, steps })
+ * Assignment 5 AlmostCrackd REST pipeline.
+ * Base URL: ALMOSTCRACKD_API_BASE (default https://api.almostcrackd.ai)
  *
- * No guessed /caption routes. One request per step; on 405 we surface the exact URL and stop.
+ * Flow A — file upload:
+ *   1. POST /pipeline/generate-presigned-url { contentType }
+ *   2. PUT presigned URL (bytes, Content-Type: file.type)
+ *   3. POST /pipeline/upload-image-from-url { imageUrl: cdnUrl, isCommonUse: false }
+ *   4. POST /pipeline/generate-captions { imageId, humorFlavorId }
+ *
+ * Flow B — public URL only (Test page):
+ *   POST /pipeline/upload-image-from-url { imageUrl, isCommonUse: false }
+ *   POST /pipeline/generate-captions { imageId, humorFlavorId }
  */
-
-import type { HumorFlavorStep } from "@/lib/db/steps";
 
 export function getAlmostCrackdApiBase(): string {
   return (process.env.ALMOSTCRACKD_API_BASE ?? "https://api.almostcrackd.ai").replace(
@@ -24,26 +28,6 @@ export type PipelinePostFailure = {
 };
 
 export type PipelinePostSuccess<T> = { ok: true; data: T };
-
-function normalizeStepTemperature(step: HumorFlavorStep): number {
-  const raw = step.llm_temperature as unknown as
-    | number
-    | string
-    | null
-    | undefined;
-  if (raw === null || raw === undefined) return 0.7;
-  if (typeof raw === "string") {
-    const t = raw.trim();
-    if (t === "") return 0.7;
-    const n = Number(t);
-    return Number.isFinite(n) ? n : 0.7;
-  }
-  if (typeof raw === "number") {
-    return Number.isFinite(raw) ? raw : 0.7;
-  }
-  const n = Number(raw);
-  return Number.isFinite(n) ? n : 0.7;
-}
 
 async function finalizeAlmostCrackdFetch(
   res: Response,
@@ -154,19 +138,73 @@ export async function pipelinePost<T = unknown>(
   return { ok: true, data: out.data as T };
 }
 
-/** Presigned URL step (Assignment 5); use when not using upload-image-from-url. */
+/** Step 1 — Assignment 5 */
 export async function generatePresignedUrl(
   contentType: string,
   accessToken: string
 ) {
-  return pipelinePost<{
-    presignedUrl?: string;
-    uploadUrl?: string;
-    cdnUrl?: string;
-    [key: string]: unknown;
-  }>("/pipeline/generate-presigned-url", { contentType }, accessToken);
+  return pipelinePost<Record<string, unknown>>(
+    "/pipeline/generate-presigned-url",
+    { contentType },
+    accessToken
+  );
 }
 
+export function pickPresignedUrls(data: Record<string, unknown>): {
+  presignedUrl?: string;
+  cdnUrl?: string;
+} {
+  const pick = (...keys: string[]): string | undefined => {
+    for (const k of keys) {
+      const v = data[k];
+      if (typeof v === "string" && v.trim()) return v.trim();
+    }
+    return undefined;
+  };
+  const presignedUrl = pick(
+    "presignedUrl",
+    "presigned_url",
+    "uploadUrl",
+    "upload_url",
+    "signedUrl",
+    "signed_url"
+  );
+  const cdnUrl = pick(
+    "cdnUrl",
+    "cdn_url",
+    "publicUrl",
+    "public_url",
+    "imageUrl",
+    "image_url",
+    "url"
+  );
+  return { presignedUrl, cdnUrl };
+}
+
+/** Step 2 — PUT file bytes (S3-compatible presigned upload; no Bearer). */
+export async function putBytesToPresignedUrl(
+  presignedUrl: string,
+  bytes: Uint8Array,
+  contentType: string
+): Promise<{ ok: true } | { ok: false; message: string }> {
+  const res = await fetch(presignedUrl, {
+    method: "PUT",
+    headers: { "Content-Type": contentType },
+    body: bytes as BodyInit,
+  });
+  const text = await res.text();
+  console.log("AlmostCrackd presigned PUT status:", res.status);
+
+  if (!res.ok) {
+    return {
+      ok: false,
+      message: `Presigned PUT failed ${res.status}: ${text.slice(0, 400)}`,
+    };
+  }
+  return { ok: true };
+}
+
+/** Step 3 — register CDN URL → imageId */
 export async function uploadImageFromUrl(
   imageUrl: string,
   accessToken: string,
@@ -179,40 +217,36 @@ export async function uploadImageFromUrl(
   );
 }
 
-export async function generateCaptionsForImage(
-  registeredImageId: string,
+export function imageIdFromRegisterResponse(data: unknown): string | undefined {
+  if (!data || typeof data !== "object") return undefined;
+  const o = data as Record<string, unknown>;
+  const a = o.imageId;
+  const b = o.image_id;
+  if (typeof a === "string" && a.trim()) return a.trim();
+  if (typeof b === "string" && b.trim()) return b.trim();
+  return undefined;
+}
+
+/**
+ * Step 4 — captions only use imageId + humorFlavorId (AlmostCrackd loads flavor/steps).
+ */
+export async function requestGenerateCaptions(
   accessToken: string,
-  params: {
-    humorFlavorId: string;
-    steps: HumorFlavorStep[];
-  }
+  params: { imageId: string; humorFlavorId: string }
 ): Promise<PipelinePostSuccess<unknown> | PipelinePostFailure> {
   const baseUrl = getAlmostCrackdApiBase();
   const endpoint = `${baseUrl}/pipeline/generate-captions`;
 
   const payload = {
-    image_id: registeredImageId,
-    humor_flavor_id: params.humorFlavorId,
-    num_captions: 5,
-    steps: params.steps.map((step) => ({
-      order_by: step.order_by,
-      llm_system_prompt: step.llm_system_prompt ?? "",
-      llm_user_prompt: step.llm_user_prompt ?? "",
-      description: step.description ?? "",
-      llm_temperature: normalizeStepTemperature(step),
-      llm_input_type_id: step.llm_input_type_id,
-      llm_output_type_id: step.llm_output_type_id,
-      llm_model_id: step.llm_model_id,
-      humor_flavor_step_type_id: step.humor_flavor_step_type_id,
-    })),
+    imageId: params.imageId,
+    humorFlavorId: params.humorFlavorId,
   };
 
+  console.log("generate-captions payload object:", payload);
   console.log(
-    "AlmostCrackd generate-captions payload:",
+    "generate-captions payload JSON:",
     JSON.stringify(payload, null, 2)
   );
-
-  const serialized = JSON.stringify(payload);
 
   const res = await fetch(endpoint, {
     method: "POST",
@@ -220,7 +254,7 @@ export async function generateCaptionsForImage(
       "Content-Type": "application/json",
       Authorization: `Bearer ${accessToken}`,
     },
-    body: serialized,
+    body: JSON.stringify(payload),
   });
 
   return finalizeAlmostCrackdFetch(res, endpoint);

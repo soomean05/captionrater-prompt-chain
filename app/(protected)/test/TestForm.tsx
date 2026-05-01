@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { HumorFlavor } from "@/lib/db/flavors";
 import type { HumorFlavorStep } from "@/lib/db/steps";
 
@@ -32,6 +32,18 @@ export function TestForm({
   const [result, setResult] = useState<GenResult | null>(null);
   const [selectedFlavorId, setSelectedFlavorId] = useState("");
   const [imageUrl, setImageUrl] = useState(SAMPLE_IMAGE_URL);
+  const [imageFile, setImageFile] = useState<File | null>(null);
+
+  const filePreviewUrl = useMemo(() => {
+    if (!imageFile) return null;
+    return URL.createObjectURL(imageFile);
+  }, [imageFile]);
+
+  useEffect(() => {
+    return () => {
+      if (filePreviewUrl) URL.revokeObjectURL(filePreviewUrl);
+    };
+  }, [filePreviewUrl]);
 
   const selectedFlavor =
     flavors.find((f) => f.id === selectedFlavorId) ?? null;
@@ -48,15 +60,28 @@ export function TestForm({
     setPending(true);
     setResult(null);
     try {
-      const res = await fetch("/api/test-flavor/generate", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "same-origin",
-        body: JSON.stringify({
-          humorFlavorId: selectedFlavorId,
-          imageUrl,
-        }),
-      });
+      let res: Response;
+
+      if (imageFile && imageFile.size > 0) {
+        const fd = new FormData();
+        fd.append("humorFlavorId", selectedFlavorId);
+        fd.append("image", imageFile);
+        res = await fetch("/api/test-flavor/generate", {
+          method: "POST",
+          credentials: "same-origin",
+          body: fd,
+        });
+      } else {
+        res = await fetch("/api/test-flavor/generate", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          credentials: "same-origin",
+          body: JSON.stringify({
+            humorFlavorId: selectedFlavorId,
+            imageUrl,
+          }),
+        });
+      }
       let data: { ok?: boolean; captions?: string[]; error?: string };
       try {
         data = (await res.json()) as typeof data;
@@ -141,8 +166,31 @@ export function TestForm({
               placeholder={SAMPLE_IMAGE_URL}
               value={imageUrl}
               onChange={(e) => setImageUrl(e.target.value)}
-              required
+              required={!(imageFile && imageFile.size > 0)}
               className="input-base w-full"
+            />
+            <p className="mt-1 text-xs muted-text">
+              Or upload an image — uses presigned URL + PUT per Assignment 5.
+            </p>
+          </div>
+
+          <div>
+            <label
+              htmlFor="image_file"
+              className="mb-1 block text-sm font-medium text-card-foreground"
+            >
+              Image file (optional)
+            </label>
+            <input
+              id="image_file"
+              name="image_file"
+              type="file"
+              accept="image/*"
+              className="input-base w-full text-sm file:mr-3"
+              onChange={(e) => {
+                const f = e.target.files?.[0] ?? null;
+                setImageFile(f);
+              }}
             />
           </div>
 
@@ -178,14 +226,14 @@ export function TestForm({
                 </p>
               </div>
             ) : null}
-            {imageUrl ? (
+            {(filePreviewUrl || imageUrl) ? (
               <div>
                 <p className="mb-2 text-sm font-medium text-card-foreground">
                   Image preview
                 </p>
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img
-                  src={imageUrl}
+                  src={filePreviewUrl ?? imageUrl}
                   alt="Test image"
                   className="max-h-48 rounded-lg border border-border object-cover"
                 />
