@@ -102,25 +102,81 @@ export function captionsFromRecords(rawCaptions: unknown[]): string[] {
     .map((caption) =>
       caption.replace(/^["']|["']$/g, "").trim()
     )
-    .filter(Boolean)
-    .slice(0, 5);
+    .filter(Boolean);
 }
 
-/** Pull caption strings from AlmostCrackd responses (including top-level record arrays). */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-export function extractCaptions(json: any): string[] {
-  const records = Array.isArray(json)
-    ? json
-    : (json?.captions ??
-      json?.data?.captions ??
-      json?.generated_captions ??
-      json?.results ??
-      json?.data ??
-      []);
+/**
+ * DFS into common AlmostCrackd wrapper shapes until we collect leaf strings/objects
+ * (objects are normalized with content/caption/text). Avoid swallowing sibling arrays—
+ * unwrap in fixed priority order and flatten nested caption arrays (array-of-arrays).
+ */
+function unwrapCaptionRawNodes(root: unknown, out: unknown[]): void {
+  if (root === null || root === undefined) return;
 
-  if (!Array.isArray(records)) return [];
+  if (typeof root === "string" || typeof root === "number") {
+    out.push(typeof root === "number" ? String(root) : root);
+    return;
+  }
 
-  return captionsFromRecords(records);
+  if (Array.isArray(root)) {
+    for (const el of root) unwrapCaptionRawNodes(el, out);
+    return;
+  }
+
+  if (typeof root !== "object") return;
+
+  const node = root as Record<string, unknown>;
+
+  const unwrapKeys = [
+    "captions",
+    "caption",
+    "generated_captions",
+    "captionVariants",
+    "caption_variants",
+    "variants",
+    "choices",
+    "outputs",
+    "suggestions",
+    "items",
+    "list",
+    "values",
+    "data",
+    "results",
+    "result",
+    "payload",
+    "output",
+    "body",
+  ] as const;
+
+  for (const key of unwrapKeys) {
+    if (!(key in node)) continue;
+    const v = node[key];
+    if (v === undefined || v === null) continue;
+    if (Array.isArray(v) && v.length === 0) continue;
+    if (
+      typeof v === "object" &&
+      !Array.isArray(v) &&
+      Object.keys(v).length === 0
+    ) {
+      continue;
+    }
+
+    const before = out.length;
+    unwrapCaptionRawNodes(v, out);
+    if (out.length > before) return;
+    // Empty wrapper — try sibling keys next (e.g. captions:{} + results:[...])
+  }
+
+  if (normalizeCaption(node).trim() !== "") {
+    out.push(node);
+  }
+}
+
+/** Pull caption strings from AlmostCrackd responses (including nested wrappers and arrays-of-arrays). */
+export function extractCaptions(json: unknown): string[] {
+  const rawLeaves: unknown[] = [];
+  unwrapCaptionRawNodes(json, rawLeaves);
+  return captionsFromRecords(rawLeaves);
 }
 
 export async function pipelinePost<T = unknown>(
