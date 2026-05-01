@@ -1,50 +1,25 @@
 "use server";
 
-import { getFlavor } from "@/lib/db/flavors";
-import { listStepsForFlavor } from "@/lib/db/steps";
-import { generateCaptions } from "@/lib/api/almostcrackd";
-
-function getContentFromStep(step: Record<string, unknown>): string {
-  return (
-    (step.llm_user_prompt as string) ??
-    (step.description as string) ??
-    ""
-  );
-}
+import { runCaptionGenerationForTest } from "@/lib/caption-generation";
 
 export async function generateCaptionsAction(formData: FormData) {
-  const flavorId = String(formData.get("flavor_id") ?? "").trim();
+  const humorFlavorId = String(formData.get("flavor_id") ?? "").trim();
   const imageUrl = String(formData.get("image_url") ?? "").trim();
 
-  if (!flavorId) return { error: "Select a humor flavor" };
-  if (!imageUrl) return { error: "Provide an image URL" };
-
-  const { data: flavor, error: flavorError } = await getFlavor(flavorId);
-  if (flavorError || !flavor) {
-    return { error: "Flavor not found" };
-  }
-
-  const { data: steps, error: stepsError } = await listStepsForFlavor(flavorId);
-  if (stepsError) return { error: stepsError.message };
-
-  const stepContents = (steps ?? []).map((s) =>
-    getContentFromStep(s as Record<string, unknown>)
-  );
-  const prompt = stepContents.join("\n\n");
-
-  const { data, error } = await generateCaptions({
+  const result = await runCaptionGenerationForTest({
+    humorFlavorId,
     imageUrl,
-    prompt: prompt || undefined,
-    steps: stepContents.length ? stepContents : undefined,
   });
 
-  if (error) return { error };
+  if (!result.ok) {
+    return { error: result.error };
+  }
 
   return {
-    flavor,
-    steps: steps ?? [],
-    imageUrl,
-    captions: data?.captions ?? [],
-    raw: data?.raw,
+    flavor: result.data.flavor,
+    steps: result.data.steps,
+    imageUrl: result.data.imageUrl,
+    captions: result.data.captions,
+    raw: result.data.raw,
   };
 }

@@ -1,14 +1,4 @@
-import { getFlavor } from "@/lib/db/flavors";
-import { listStepsForFlavor } from "@/lib/db/steps";
-import { generateCaptions } from "@/lib/api/almostcrackd";
-
-function stepTextFromRow(step: Record<string, unknown>): string {
-  return (
-    (step.llm_user_prompt as string) ??
-    (step.description as string) ??
-    ""
-  );
-}
+import { runCaptionGenerationForTest } from "@/lib/caption-generation";
 
 export async function POST(request: Request) {
   try {
@@ -18,47 +8,25 @@ export async function POST(request: Request) {
     ).trim();
     const imageUrl = String(body.imageUrl ?? body.image_url ?? "").trim();
 
-    if (!humorFlavorId) {
-      return Response.json({ error: "humorFlavorId is required" }, { status: 400 });
-    }
-    if (!imageUrl) {
-      return Response.json({ error: "imageUrl is required" }, { status: 400 });
-    }
-
-    const { data: flavor, error: flavorError } = await getFlavor(humorFlavorId);
-    if (flavorError || !flavor) {
-      return Response.json({ error: "Flavor not found" }, { status: 404 });
-    }
-
-    const { data: steps, error: stepsError } = await listStepsForFlavor(
-      humorFlavorId
-    );
-    if (stepsError) {
-      return Response.json({ error: stepsError.message }, { status: 500 });
-    }
-
-    const stepContents = (steps ?? []).map((s) =>
-      stepTextFromRow(s as Record<string, unknown>)
-    );
-    const prompt = stepContents.filter(Boolean).join("\n\n");
-
-    const { data, error } = await generateCaptions({
+    const result = await runCaptionGenerationForTest({
+      humorFlavorId,
       imageUrl,
-      prompt: prompt || undefined,
-      steps: stepContents.some(Boolean) ? stepContents : undefined,
     });
 
-    if (error) {
-      return Response.json({ error }, { status: 502 });
+    if (!result.ok) {
+      return Response.json(
+        { error: result.error },
+        { status: result.status ?? 500 }
+      );
     }
 
     return Response.json({
       ok: true,
-      captions: data?.captions ?? [],
-      raw: data?.raw,
-      flavor,
-      steps: steps ?? [],
-      imageUrl,
+      captions: result.data.captions,
+      raw: result.data.raw,
+      flavor: result.data.flavor,
+      steps: result.data.steps,
+      imageUrl: result.data.imageUrl,
       body,
     });
   } catch (error) {

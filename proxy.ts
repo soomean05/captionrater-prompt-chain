@@ -7,6 +7,10 @@ export async function proxy(request: NextRequest) {
 
 export const config = {
   matcher: [
-    "/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
+    /*
+     * Skip API routes — they must handle their own verbs (e.g. POST).
+     * Running the Supabase session proxy on /api/* caused POST to fail with 405 for some setups.
+     */
+    "/((?!_next/static|_next/image|favicon.ico|api/|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
   ],
 };
