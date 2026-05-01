@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
+import { listStepsMinimalForFlavor } from "@/lib/db/steps";
 import { runAssignment5TestFlavorCaptions } from "@/lib/test-flavor-captions";
 
 function captionBackendOk(): boolean {
@@ -40,36 +41,67 @@ export async function POST(request: Request) {
     const accessToken = session.access_token;
     const contentTypeHdr = request.headers.get("content-type") ?? "";
 
-    let result;
+    let humorFlavorId: string;
+    let multipartFile: File | null = null;
+    let imageUrl = "";
 
     if (contentTypeHdr.includes("multipart/form-data")) {
       const form = await request.formData();
-      const humorFlavorId = String(form.get("humorFlavorId") ?? "").trim();
+      humorFlavorId = String(form.get("humorFlavorId") ?? "").trim();
       const file = form.get("image");
+      multipartFile = file instanceof File ? file : null;
 
-      if (!(file instanceof File) || file.size === 0) {
+      if (!humorFlavorId) {
+        return Response.json({ error: "humorFlavorId is required." }, { status: 400 });
+      }
+      if (!multipartFile || multipartFile.size === 0) {
         return Response.json(
           { error: "Multipart request must include a non-empty image file." },
           { status: 400 }
         );
       }
+    } else {
+      const body = (await request.json()) as Record<string, unknown>;
+      humorFlavorId = String(body.humorFlavorId ?? "").trim();
+      imageUrl = String(body.imageUrl ?? "").trim();
 
-      const buffer = Buffer.from(await file.arrayBuffer());
+      if (!humorFlavorId) {
+        return Response.json({ error: "humorFlavorId is required." }, { status: 400 });
+      }
+    }
+
+    const { data: steps, error: stepsError } =
+      await listStepsMinimalForFlavor(humorFlavorId);
+
+    if (stepsError) {
+      throw stepsError;
+    }
+
+    if (!steps || steps.length === 0) {
+      return Response.json(
+        {
+          error:
+            "This humor flavor has no steps yet. Add at least one step before testing captions.",
+        },
+        { status: 400 }
+      );
+    }
+
+    let result;
+
+    if (contentTypeHdr.includes("multipart/form-data") && multipartFile) {
+      const buffer = Buffer.from(await multipartFile.arrayBuffer());
       result = await runAssignment5TestFlavorCaptions({
         accessToken,
         humorFlavorId,
         imageFile: {
           buffer,
-          contentType: file.type?.trim()
-            ? file.type
+          contentType: multipartFile.type?.trim()
+            ? multipartFile.type
             : "application/octet-stream",
         },
       });
     } else {
-      const body = (await request.json()) as Record<string, unknown>;
-      const humorFlavorId = String(body.humorFlavorId ?? "").trim();
-      const imageUrl = String(body.imageUrl ?? "").trim();
-
       result = await runAssignment5TestFlavorCaptions({
         accessToken,
         humorFlavorId,

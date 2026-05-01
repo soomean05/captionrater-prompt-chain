@@ -28,6 +28,16 @@ export type HumorFlavorStep = {
   humor_flavor_step_type_id: number | null;
 };
 
+/** Minimal rows for gates (Test Humor Flavor before AlmostCrackd). */
+export async function listStepsMinimalForFlavor(humorFlavorId: string) {
+  const supabase = createAdminClient();
+  return supabase
+    .from("humor_flavor_steps")
+    .select("id, order_by, llm_user_prompt")
+    .eq("humor_flavor_id", humorFlavorId)
+    .order("order_by", { ascending: true });
+}
+
 export async function listStepsForFlavor(flavorId: string) {
   const supabase = createAdminClient();
   const { data, error } = await supabase
@@ -58,18 +68,15 @@ export async function createStep(input: {
   const { data, error } = await supabase
     .from("humor_flavor_steps")
     .insert({
-    humor_flavor_id: input.humor_flavor_id,
-    order_by: input.orderBy,
-    llm_user_prompt: input.llmUserPrompt,
-    llm_system_prompt: null,
-    description: null,
-    llm_temperature: 0.7,
-    llm_input_type_id: 1,
-    llm_output_type_id: 1,
-    llm_model_id: 1,
-    humor_flavor_step_type_id: 1,
-    created_by_user_id: input.userId,
-    modified_by_user_id: input.userId,
+      humor_flavor_id: input.humor_flavor_id,
+      order_by: input.orderBy,
+      llm_user_prompt: input.llmUserPrompt,
+      llm_input_type_id: 1,
+      llm_output_type_id: 1,
+      llm_model_id: 1,
+      humor_flavor_step_type_id: 1,
+      created_by_user_id: input.userId,
+      modified_by_user_id: input.userId,
     })
     .select(STEP_SELECT)
     .single();
