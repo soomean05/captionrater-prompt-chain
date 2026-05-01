@@ -11,10 +11,12 @@ import type { HumorFlavorStep } from "@/lib/db/steps";
 
 function getContent(step: HumorFlavorStep): string {
   return (
-    (step as { content?: string }).content ??
     (step as { prompt?: string }).prompt ??
-    (step as { text?: string }).text ??
     (step as { instruction?: string }).instruction ??
+    (step as { step_text?: string }).step_text ??
+    (step as { system_prompt?: string }).system_prompt ??
+    (step as { user_prompt?: string }).user_prompt ??
+    (step as { text?: string }).text ??
     ""
   );
 }

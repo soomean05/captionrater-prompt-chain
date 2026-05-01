@@ -4,13 +4,18 @@ export type HumorFlavorStep = {
   id: string;
   humor_flavor_id: string;
   order_value: number | null;
-  content: string | null;
+  prompt: string | null;
   created_datetime_utc?: string | null;
 };
 
-const contentKey = "content";
 type StepColumns = {
-  contentColumn: "content" | "prompt" | "text" | "instruction";
+  contentColumn:
+    | "prompt"
+    | "instruction"
+    | "step_text"
+    | "system_prompt"
+    | "user_prompt"
+    | "text";
   orderColumn: "order_index" | "sort_order" | "position" | "step_order" | "sequence" | null;
   hasCreatedByUserId: boolean;
   hasModifiedByUserId: boolean;
@@ -27,12 +32,14 @@ async function getStepColumns(): Promise<StepColumns> {
   if (!stepColumnsPromise) {
     stepColumnsPromise = (async () => {
       const contentCandidates: StepColumns["contentColumn"][] = [
-        "content",
         "prompt",
-        "text",
         "instruction",
+        "step_text",
+        "system_prompt",
+        "user_prompt",
+        "text",
       ];
-      let contentColumn: StepColumns["contentColumn"] = "content";
+      let contentColumn: StepColumns["contentColumn"] = "prompt";
       for (const candidate of contentCandidates) {
         if (await columnExists("humor_flavor_steps", candidate)) {
           contentColumn = candidate;
@@ -87,27 +94,42 @@ export async function listStepsForFlavor(flavorId: string) {
     order_value: columns.orderColumn
       ? ((row[columns.orderColumn] as number | null | undefined) ?? null)
       : null,
-    content: getContentFromRow(row),
+    prompt: getPromptFromRow(row),
   })) as HumorFlavorStep[];
   return { data: mapped, error };
 }
 
 export async function getStep(id: string) {
   const supabase = createAdminClient();
+  const columns = await getStepColumns();
   const { data, error } = await supabase
     .from("humor_flavor_steps")
     .select("*")
     .eq("id", id)
     .maybeSingle();
-  return { data: data as HumorFlavorStep | null, error };
+  const row = (data ?? null) as Record<string, unknown> | null;
+  return {
+    data: row
+      ? {
+          ...(row as HumorFlavorStep),
+          order_value: columns.orderColumn
+            ? ((row[columns.orderColumn] as number | null | undefined) ?? null)
+            : null,
+          prompt: getPromptFromRow(row),
+        }
+      : null,
+    error,
+  };
 }
 
-function getContentFromRow(row: Record<string, unknown>): string {
+function getPromptFromRow(row: Record<string, unknown>): string {
   return (
-    (row[contentKey] as string) ??
     (row.prompt as string) ??
-    (row.text as string) ??
     (row.instruction as string) ??
+    (row.step_text as string) ??
+    (row.system_prompt as string) ??
+    (row.user_prompt as string) ??
+    (row.text as string) ??
     ""
   );
 }
@@ -137,7 +159,7 @@ export async function createStep(input: {
     .single();
   return {
     data: data
-      ? { ...data, content: getContentFromRow(data as Record<string, unknown>) }
+      ? { ...data, prompt: getPromptFromRow(data as Record<string, unknown>) }
       : null,
     error,
   };
@@ -166,7 +188,7 @@ export async function updateStep(
     .single();
   return {
     data: data
-      ? { ...data, content: getContentFromRow(data as Record<string, unknown>) }
+      ? { ...data, prompt: getPromptFromRow(data as Record<string, unknown>) }
       : null,
     error,
   };

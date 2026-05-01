@@ -6,10 +6,12 @@ import { generateCaptions } from "@/lib/api/almostcrackd";
 
 function getContentFromStep(step: Record<string, unknown>): string {
   return (
-    (step.content as string) ??
     (step.prompt as string) ??
-    (step.text as string) ??
     (step.instruction as string) ??
+    (step.step_text as string) ??
+    (step.system_prompt as string) ??
+    (step.user_prompt as string) ??
+    (step.text as string) ??
     ""
   );
 }
