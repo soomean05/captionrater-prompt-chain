@@ -2,7 +2,7 @@
  * Assignment 5 AlmostCrackd REST pipeline (from production client at almostcrackd.ai):
  * - POST /pipeline/generate-presigned-url  { contentType }
  * - POST /pipeline/upload-image-from-url   { imageUrl, isCommonUse? }  → { imageId }
- * - POST /pipeline/generate-captions      { imageId, ... }
+ * - POST /pipeline/generate-captions      JSON body via JSON.stringify({ image_id, humor_flavor_id, num_captions, steps })
  *
  * No guessed /caption routes. One request per step; on 405 we surface the exact URL and stop.
  */
@@ -24,6 +24,67 @@ export type PipelinePostFailure = {
 };
 
 export type PipelinePostSuccess<T> = { ok: true; data: T };
+
+function normalizeStepTemperature(step: HumorFlavorStep): number {
+  const raw = step.llm_temperature as unknown as
+    | number
+    | string
+    | null
+    | undefined;
+  if (raw === null || raw === undefined) return 0.7;
+  if (typeof raw === "string") {
+    const t = raw.trim();
+    if (t === "") return 0.7;
+    const n = Number(t);
+    return Number.isFinite(n) ? n : 0.7;
+  }
+  if (typeof raw === "number") {
+    return Number.isFinite(raw) ? raw : 0.7;
+  }
+  const n = Number(raw);
+  return Number.isFinite(n) ? n : 0.7;
+}
+
+async function finalizeAlmostCrackdFetch(
+  res: Response,
+  endpoint: string
+): Promise<PipelinePostSuccess<unknown> | PipelinePostFailure> {
+  const text = await res.text();
+  console.log("AlmostCrackd status:", res.status);
+  console.log("AlmostCrackd raw response:", text);
+
+  if (res.status === 405) {
+    return {
+      ok: false,
+      status: 405,
+      endpoint,
+      message: `AlmostCrackd returned 405 METHOD NOT ALLOWED at: ${endpoint}`,
+    };
+  }
+
+  let json: unknown;
+  try {
+    json = text ? JSON.parse(text) : null;
+  } catch {
+    throw new Error(`AlmostCrackd returned non-JSON: ${text}`);
+  }
+
+  if (!res.ok) {
+    const o = json as Record<string, unknown> | null;
+    const msg =
+      (typeof o?.message === "string" && o.message) ||
+      (typeof o?.statusMessage === "string" && o.statusMessage) ||
+      text.slice(0, 400);
+    return {
+      ok: false,
+      status: res.status,
+      endpoint,
+      message: `AlmostCrackd error ${res.status} at ${endpoint}: ${msg}`,
+    };
+  }
+
+  return { ok: true, data: json };
+}
 
 /** Pull caption strings out of heterogeneous AlmostCrackd JSON shapes. */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -88,41 +149,9 @@ export async function pipelinePost<T = unknown>(
     body: JSON.stringify(body),
   });
 
-  const text = await res.text();
-  console.log("AlmostCrackd status:", res.status);
-  console.log("AlmostCrackd raw response:", text);
-
-  if (res.status === 405) {
-    return {
-      ok: false,
-      status: 405,
-      endpoint,
-      message: `AlmostCrackd returned 405 METHOD NOT ALLOWED at: ${endpoint}`,
-    };
-  }
-
-  let json: unknown;
-  try {
-    json = text ? JSON.parse(text) : null;
-  } catch {
-    throw new Error(`AlmostCrackd returned non-JSON: ${text}`);
-  }
-
-  if (!res.ok) {
-    const o = json as Record<string, unknown> | null;
-    const msg =
-      (typeof o?.message === "string" && o.message) ||
-      (typeof o?.statusMessage === "string" && o.statusMessage) ||
-      text.slice(0, 400);
-    return {
-      ok: false,
-      status: res.status,
-      endpoint,
-      message: `AlmostCrackd error ${res.status} at ${endpoint}: ${msg}`,
-    };
-  }
-
-  return { ok: true, data: json as T };
+  const out = await finalizeAlmostCrackdFetch(res, endpoint);
+  if (!out.ok) return out;
+  return { ok: true, data: out.data as T };
 }
 
 /** Presigned URL step (Assignment 5); use when not using upload-image-from-url. */
@@ -150,41 +179,49 @@ export async function uploadImageFromUrl(
   );
 }
 
-export type HumorFlavorMeta = {
-  id: string;
-  name: string | null;
-  description: string | null;
-};
-
 export async function generateCaptionsForImage(
-  imageId: string,
+  registeredImageId: string,
   accessToken: string,
-  options?: {
-    prompt?: string;
-    humorFlavor?: HumorFlavorMeta;
-    steps?: HumorFlavorStep[];
+  params: {
+    humorFlavorId: string;
+    steps: HumorFlavorStep[];
   }
-) {
-  const body: Record<string, unknown> = { imageId };
+): Promise<PipelinePostSuccess<unknown> | PipelinePostFailure> {
+  const baseUrl = getAlmostCrackdApiBase();
+  const endpoint = `${baseUrl}/pipeline/generate-captions`;
 
-  if (options?.prompt?.trim()) {
-    body.prompt = options.prompt.trim();
-  }
+  const payload = {
+    image_id: registeredImageId,
+    humor_flavor_id: params.humorFlavorId,
+    num_captions: 5,
+    steps: params.steps.map((step) => ({
+      order_by: step.order_by,
+      llm_system_prompt: step.llm_system_prompt ?? "",
+      llm_user_prompt: step.llm_user_prompt ?? "",
+      description: step.description ?? "",
+      llm_temperature: normalizeStepTemperature(step),
+      llm_input_type_id: step.llm_input_type_id,
+      llm_output_type_id: step.llm_output_type_id,
+      llm_model_id: step.llm_model_id,
+      humor_flavor_step_type_id: step.humor_flavor_step_type_id,
+    })),
+  };
 
-  if (options?.humorFlavor) {
-    body.humorFlavorId = options.humorFlavor.id;
-    body.flavorName = options.humorFlavor.name;
-    body.flavorDescription = options.humorFlavor.description;
-  }
+  console.log(
+    "AlmostCrackd generate-captions payload:",
+    JSON.stringify(payload, null, 2)
+  );
 
-  if (options?.steps?.length) {
-    body.steps = options.steps.map((s) => ({
-      order_by: s.order_by,
-      llm_system_prompt: s.llm_system_prompt,
-      llm_user_prompt: s.llm_user_prompt,
-      description: s.description,
-    }));
-  }
+  const serialized = JSON.stringify(payload);
 
-  return pipelinePost<unknown>("/pipeline/generate-captions", body, accessToken);
+  const res = await fetch(endpoint, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${accessToken}`,
+    },
+    body: serialized,
+  });
+
+  return finalizeAlmostCrackdFetch(res, endpoint);
 }

@@ -1,7 +1,5 @@
 import { getFlavor } from "@/lib/db/flavors";
 import { listStepsForFlavor } from "@/lib/db/steps";
-import type { HumorFlavor } from "@/lib/db/flavors";
-import type { HumorFlavorStep } from "@/lib/db/steps";
 import {
   extractCaptions,
   generateCaptionsForImage,
@@ -16,39 +14,14 @@ function failureMessage(f: PipelinePostFailure): string {
   return f.message;
 }
 
-function buildHumorFlavorPrompt(
-  flavor: HumorFlavor,
-  steps: HumorFlavorStep[]
-): string {
-  const header = [
-    "## Humor flavor",
-    `Name / label: ${flavor.name?.trim() || "(none)"}`,
-    `Description: ${flavor.description?.trim() || "(none)"}`,
-  ].join("\n");
-
-  const stepBlocks = steps.map((s, i) => {
-    const ord = s.order_by ?? i + 1;
-    const parts = [
-      `### Step ${ord}`,
-      s.llm_system_prompt?.trim()
-        ? `llm_system_prompt:\n${s.llm_system_prompt.trim()}`
-        : null,
-      s.llm_user_prompt?.trim()
-        ? `llm_user_prompt:\n${s.llm_user_prompt.trim()}`
-        : null,
-      s.description?.trim()
-        ? `description:\n${s.description.trim()}`
-        : null,
-    ].filter(Boolean);
-    return parts.join("\n\n");
-  });
-
-  return [
-    header,
-    stepBlocks.length ? stepBlocks.join("\n\n") : "## Steps\n(no steps)",
-    "",
-    "Apply this humor flavor and step chain when generating captions.",
-  ].join("\n\n");
+function registeredImageIdFromUpload(
+  data: Record<string, unknown>
+): string | undefined {
+  const a = data.imageId;
+  const b = data.image_id;
+  if (typeof a === "string" && a.trim()) return a.trim();
+  if (typeof b === "string" && b.trim()) return b.trim();
+  return undefined;
 }
 
 /**
@@ -86,13 +59,6 @@ export async function runAssignment5TestFlavorCaptions(input: {
   }
 
   const orderedSteps = steps ?? [];
-  const humorPrompt = buildHumorFlavorPrompt(flavor, orderedSteps);
-
-  const flavorMeta = {
-    id: flavor.id,
-    name: flavor.name,
-    description: flavor.description,
-  };
 
   const upload = await uploadImageFromUrl(
     imageUrl,
@@ -107,8 +73,10 @@ export async function runAssignment5TestFlavorCaptions(input: {
     };
   }
 
-  const imageId = upload.data.imageId;
-  if (!imageId || typeof imageId !== "string") {
+  const imageId = registeredImageIdFromUpload(
+    upload.data as Record<string, unknown>
+  );
+  if (!imageId) {
     return {
       ok: false,
       error: "imageId not returned from /pipeline/upload-image-from-url",
@@ -116,17 +84,10 @@ export async function runAssignment5TestFlavorCaptions(input: {
     };
   }
 
-  let gen = await generateCaptionsForImage(imageId, input.accessToken, {
-    prompt: humorPrompt,
-    humorFlavor: flavorMeta,
+  const gen = await generateCaptionsForImage(imageId, input.accessToken, {
+    humorFlavorId: flavor.id,
     steps: orderedSteps,
   });
-  if (!gen.ok && gen.status === 400) {
-    gen = await generateCaptionsForImage(imageId, input.accessToken, {
-      humorFlavor: flavorMeta,
-      steps: orderedSteps,
-    });
-  }
   if (!gen.ok) {
     return {
       ok: false,
