@@ -1,5 +1,7 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 
+type FlavorNameColumn = "label" | "title" | "description";
+
 export type HumorFlavor = {
   id: string;
   name: string | null;
@@ -7,23 +9,100 @@ export type HumorFlavor = {
   created_datetime_utc?: string | null;
 };
 
-export async function listFlavors() {
+type HumorFlavorRow = {
+  id: string;
+  description: string | null;
+  created_datetime_utc?: string | null;
+  [key: string]: unknown;
+};
+
+let flavorNameColumnPromise: Promise<FlavorNameColumn> | null = null;
+
+async function detectFlavorNameColumn(): Promise<FlavorNameColumn> {
   const supabase = createAdminClient();
-  const { data, error } = await supabase
+  const candidates: FlavorNameColumn[] = ["label", "title", "description"];
+
+  for (const candidate of candidates) {
+    const { error } = await supabase
+      .from("humor_flavors")
+      .select(`id,${candidate}`)
+      .limit(1);
+    if (!error) return candidate;
+  }
+
+  return "description";
+}
+
+async function getFlavorNameColumn() {
+  if (!flavorNameColumnPromise) {
+    flavorNameColumnPromise = detectFlavorNameColumn();
+  }
+  return flavorNameColumnPromise;
+}
+
+function mapFlavor(
+  row: HumorFlavorRow,
+  flavorNameColumn: FlavorNameColumn
+): HumorFlavor {
+  const displayName = row[flavorNameColumn];
+  return {
+    id: row.id,
+    name: typeof displayName === "string" ? displayName : null,
+    description: row.description ?? null,
+    created_datetime_utc: row.created_datetime_utc ?? null,
+  };
+}
+
+export async function listFlavors(input?: {
+  page?: number;
+  pageSize?: number;
+  query?: string;
+}) {
+  const supabase = createAdminClient();
+  const flavorNameColumn = await getFlavorNameColumn();
+  const page = Math.max(1, input?.page ?? 1);
+  const pageSize = input?.pageSize ?? 10;
+  const from = (page - 1) * pageSize;
+  const to = from + pageSize - 1;
+  const query = input?.query?.trim() ?? "";
+
+  let q = supabase
     .from("humor_flavors")
-    .select("*")
+    .select(`id,description,created_datetime_utc,${flavorNameColumn}`, {
+      count: "exact",
+    })
     .order("created_datetime_utc", { ascending: false });
-  return { data: (data ?? []) as HumorFlavor[], error };
+
+  if (query) {
+    q = q.or(
+      `${flavorNameColumn}.ilike.%${query}%,description.ilike.%${query}%`
+    );
+  }
+
+  const { data, error, count } = await q.range(from, to);
+  return {
+    data: ((data ?? []) as HumorFlavorRow[]).map((row) =>
+      mapFlavor(row, flavorNameColumn)
+    ),
+    count: count ?? 0,
+    page,
+    pageSize,
+    error,
+  };
 }
 
 export async function getFlavor(id: string) {
   const supabase = createAdminClient();
+  const flavorNameColumn = await getFlavorNameColumn();
   const { data, error } = await supabase
     .from("humor_flavors")
-    .select("*")
+    .select(`id,description,created_datetime_utc,${flavorNameColumn}`)
     .eq("id", id)
     .maybeSingle();
-  return { data: data as HumorFlavor | null, error };
+  return {
+    data: data ? mapFlavor(data as HumorFlavorRow, flavorNameColumn) : null,
+    error,
+  };
 }
 
 export async function createFlavor(input: {
@@ -31,15 +110,19 @@ export async function createFlavor(input: {
   description?: string;
 }) {
   const supabase = createAdminClient();
+  const flavorNameColumn = await getFlavorNameColumn();
   const { data, error } = await supabase
     .from("humor_flavors")
     .insert({
-      name: input.name,
+      [flavorNameColumn]: input.name,
       description: input.description ?? null,
     })
-    .select()
+    .select(`id,description,created_datetime_utc,${flavorNameColumn}`)
     .single();
-  return { data: data as HumorFlavor | null, error };
+  return {
+    data: data ? mapFlavor(data as HumorFlavorRow, flavorNameColumn) : null,
+    error,
+  };
 }
 
 export async function updateFlavor(
@@ -47,13 +130,20 @@ export async function updateFlavor(
   input: { name?: string; description?: string }
 ) {
   const supabase = createAdminClient();
+  const flavorNameColumn = await getFlavorNameColumn();
+  const payload: { description?: string | null; [key: string]: unknown } = {};
+  if (input.name !== undefined) payload[flavorNameColumn] = input.name;
+  if (input.description !== undefined) payload.description = input.description;
   const { data, error } = await supabase
     .from("humor_flavors")
-    .update(input)
+    .update(payload)
     .eq("id", id)
-    .select()
+    .select(`id,description,created_datetime_utc,${flavorNameColumn}`)
     .single();
-  return { data: data as HumorFlavor | null, error };
+  return {
+    data: data ? mapFlavor(data as HumorFlavorRow, flavorNameColumn) : null,
+    error,
+  };
 }
 
 export async function deleteFlavor(id: string) {
