@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import { generateCaptionsAction } from "./actions";
 import type { HumorFlavor } from "@/lib/db/flavors";
 import type { HumorFlavorStep } from "@/lib/db/steps";
 
@@ -19,15 +18,55 @@ const SAMPLE_IMAGE_URL =
 
 export function TestForm({ flavors }: { flavors: HumorFlavor[] }) {
   const [pending, setPending] = useState(false);
-  const [result, setResult] = useState<Awaited<
-    ReturnType<typeof generateCaptionsAction>
-  > | null>(null);
+  const [result, setResult] = useState<
+    | {
+        error: string;
+      }
+    | {
+        captions: string[];
+        imageUrl?: string;
+        flavor?: { id?: string; name?: string };
+        steps?: (HumorFlavorStep | Record<string, unknown>)[];
+        body?: unknown;
+      }
+    | null
+  >(null);
 
-  async function handleSubmit(formData: FormData) {
+  async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const formData = new FormData(event.currentTarget);
+    const humorFlavorId = String(formData.get("flavor_id") ?? "").trim();
+    const imageUrl = String(formData.get("image_url") ?? "").trim();
+    const apiUrl = "/api/generate-captions";
+
     setPending(true);
     setResult(null);
-    const res = await generateCaptionsAction(formData);
-    setResult(res);
+    try {
+      console.log("ABOUT TO POST TO:", apiUrl);
+
+      const res = await fetch(apiUrl, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ humorFlavorId, imageUrl }),
+      });
+
+      console.log("POST RESPONSE:", res.status, res.url);
+      const json = (await res.json()) as Record<string, unknown>;
+      if (!res.ok) {
+        setResult({ error: String(json.error ?? "Request failed") });
+      } else {
+        setResult({
+          captions: Array.isArray(json.captions)
+            ? (json.captions as string[])
+            : [],
+          body: json.body,
+        });
+      }
+    } catch (error) {
+      setResult({
+        error: error instanceof Error ? error.message : "Unknown error",
+      });
+    }
     setPending(false);
   }
 
@@ -37,7 +76,7 @@ export function TestForm({ flavors }: { flavors: HumorFlavor[] }) {
         <h2 className="mb-4 text-lg font-medium text-card-foreground">
           Generate captions
         </h2>
-        <form action={handleSubmit} className="space-y-4">
+        <form onSubmit={handleSubmit} className="space-y-4">
           <div>
             <label
               htmlFor="flavor_id"

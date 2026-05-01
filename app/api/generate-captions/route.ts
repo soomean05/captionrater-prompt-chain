@@ -1,10 +1,11 @@
 export async function POST(request: Request) {
   try {
-    await request.json();
+    const body = await request.json();
 
     return Response.json({
       ok: true,
-      captions: [],
+      captions: ["test caption works"],
+      body,
     });
   } catch (error) {
     return Response.json(
