@@ -20,7 +20,7 @@ export default async function HomePage() {
         Prompt Chain Tool
       </h1>
       <p className="text-center muted-text">
-        Manage humor flavors and test caption generation via api.almostcrackd.ai
+        Manage humor flavors and test caption generation with OpenAI
       </p>
       <div className="flex flex-col gap-4 sm:flex-row">
         <Link

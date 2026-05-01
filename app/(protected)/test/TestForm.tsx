@@ -153,9 +153,8 @@ export function TestForm({ flavors }: { flavors: HumorFlavor[] }) {
                 </ul>
               ) : (
                 <p className="text-sm text-muted-foreground">
-                  No captions returned. If AlmostCrackd returns POST 405 on
-                  every path, try CAPTION_BACKEND=openai and OPENAI_API_KEY, or set
-                  ALMOSTCRACKD_ENDPOINT from their docs.
+                  No captions returned. Ensure OPENAI_API_KEY is set in your
+                  environment.
                 </p>
               )}
             </div>
