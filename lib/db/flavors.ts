@@ -33,7 +33,8 @@ type SupabaseLike = ReturnType<typeof createAdminClient>;
 
 export async function makeUniqueFlavorSlug(
   supabase: SupabaseLike,
-  baseName: string
+  baseName: string,
+  options?: { excludeFlavorId?: string }
 ) {
   const baseSlug = slugify(baseName);
 
@@ -41,10 +42,14 @@ export async function makeUniqueFlavorSlug(
     throw new Error("Please enter a valid flavor name.");
   }
 
-  const { data, error } = await supabase
+  let q = supabase
     .from("humor_flavors")
-    .select("slug")
+    .select("id,slug")
     .ilike("slug", `${baseSlug}%`);
+  if (options?.excludeFlavorId) {
+    q = q.neq("id", options.excludeFlavorId);
+  }
+  const { data, error } = await q;
 
   if (error) throw error;
 
@@ -212,8 +217,22 @@ export async function updateFlavor(
   const payload: { description?: string | null; [key: string]: unknown } = {};
   payload.modified_by_user_id = input.userId;
   if (input.name !== undefined) {
-    payload[flavorNameColumn] = input.name;
-    payload.slug = slugify(input.name);
+    const { data: currentFlavor, error: currentFlavorError } = await supabase
+      .from("humor_flavors")
+      .select(`id,${flavorNameColumn},slug`)
+      .eq("id", id)
+      .maybeSingle();
+    if (currentFlavorError) {
+      return { data: null, error: currentFlavorError };
+    }
+    const currentRow = (currentFlavor ?? null) as Record<string, unknown> | null;
+    const currentName = (currentRow?.[flavorNameColumn] as string | null) ?? null;
+    if (currentName !== input.name) {
+      payload[flavorNameColumn] = input.name;
+      payload.slug = await makeUniqueFlavorSlug(supabase, input.name, {
+        excludeFlavorId: id,
+      });
+    }
   }
   if (input.description !== undefined) payload.description = input.description;
   const { data, error } = await supabase
