@@ -429,7 +429,10 @@ export async function requestGenerateCaptions(
       30,
       Math.max(1, Math.floor(params.captionCount))
     );
-    if (n > 1) generatePayload.count = n;
+    if (n > 1) {
+      generatePayload.count = n;
+      generatePayload.captionCount = n;
+    }
   }
 
   if (!generatePayload.imageId) {

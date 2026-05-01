@@ -15,19 +15,22 @@ export default async function HomePage() {
   }
 
   return (
-    <div className="page-shell flex flex-col items-center justify-center gap-8 px-6">
-      <h1 className="text-2xl font-semibold text-foreground">
-        Prompt Chain Tool
-      </h1>
-      <p className="text-center muted-text">
-        Manage humor flavors and test AlmostCrackd caption generation
-      </p>
+    <div className="page-shell flex flex-col items-center justify-center gap-12 px-6 py-20">
+      <div className="max-w-xl text-center space-y-6">
+        <p className="text-xs font-semibold uppercase tracking-[0.25em] text-violet-600 dark:text-violet-400">
+          Prompt Chain Tool
+        </p>
+        <h1 className="bg-linear-to-br from-foreground via-foreground to-violet-600 bg-clip-text text-4xl font-extrabold tracking-tight text-transparent dark:to-violet-400 sm:text-5xl">
+          Shape humor flavors, chain prompts, ship captions.
+        </h1>
+        <p className="mx-auto max-w-md text-lg leading-relaxed text-muted-foreground">
+          Manage flavor libraries, orchestrate AlmostCrackd steps, then stress-test
+          ideas in one polished workspace.
+        </p>
+      </div>
       <div className="flex flex-col gap-4 sm:flex-row">
-        <Link
-          href="/login"
-          className="btn-primary px-6 py-3"
-        >
-          Log in
+        <Link href="/login" className="btn-primary min-w-[10rem] px-8 py-3 text-base shadow-lg">
+          Log in with Google
         </Link>
       </div>
     </div>

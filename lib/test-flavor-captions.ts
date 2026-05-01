@@ -10,6 +10,19 @@ import {
   type PipelinePostFailure,
 } from "@/lib/api/almostcrackd-pipeline";
 
+/** Merge caption runs; exact match after trim (case-sensitive) so near-dupes from the model stay distinct. */
+function dedupeExactLines(lines: string[]): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const line of lines) {
+    const t = line.trim();
+    if (!t || seen.has(t)) continue;
+    seen.add(t);
+    out.push(t);
+  }
+  return out;
+}
+
 function failureMessage(f: PipelinePostFailure): string {
   return f.message;
 }
@@ -111,10 +124,16 @@ export async function runAssignment5TestFlavorCaptions(input: {
     };
   }
 
+  const requested =
+    typeof input.captionCount === "number" &&
+    Number.isFinite(input.captionCount)
+      ? Math.min(30, Math.max(1, Math.floor(input.captionCount)))
+      : undefined;
+
   const gen = await requestGenerateCaptions(input.accessToken, {
     imageId,
     humorFlavorId: flavor.id,
-    captionCount: input.captionCount,
+    captionCount: requested,
   });
 
   if (!gen.ok) {
@@ -125,12 +144,39 @@ export async function runAssignment5TestFlavorCaptions(input: {
     };
   }
 
-  const captionsJson = gen.data;
-  const captions = extractCaptions(captionsJson);
+  let captions = dedupeExactLines(extractCaptions(gen.data));
+
+  /** Many backends ignore `count` and only return one string; stitch extra generate calls until we have enough distinct lines or we hit budget. */
+  if (captions.length > 0 && requested !== undefined && requested > 1) {
+    const maxCalls = Math.min(12, requested + 4);
+    let calls = 1;
+    let stale = 0;
+    while (captions.length < requested && calls < maxCalls) {
+      const prevLen = captions.length;
+      const next = await requestGenerateCaptions(input.accessToken, {
+        imageId,
+        humorFlavorId: flavor.id,
+        captionCount: requested,
+      });
+      if (!next.ok) break;
+      calls += 1;
+      captions = dedupeExactLines([
+        ...captions,
+        ...extractCaptions(next.data),
+      ]);
+      if (captions.length === prevLen) {
+        stale += 1;
+        if (stale >= 2) break;
+      } else {
+        stale = 0;
+      }
+    }
+    captions = captions.slice(0, requested);
+  }
 
   if (captions.length === 0) {
     throw new Error(
-      `AlmostCrackd returned 0 captions. Raw response: ${JSON.stringify(captionsJson)}`
+      `AlmostCrackd returned 0 captions. Raw response: ${JSON.stringify(gen.data)}`
     );
   }
 

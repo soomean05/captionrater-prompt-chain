@@ -71,11 +71,38 @@ body {
 
 @layer components {
   .page-shell {
-    @apply min-h-screen bg-background text-foreground;
+    @apply relative isolate min-h-screen text-foreground;
+  }
+
+  .nav-pill {
+    @apply inline-flex rounded-full px-4 py-2 text-sm font-medium text-muted-foreground transition hover:bg-muted/80 hover:text-foreground;
+  }
+
+  .nav-pill-active {
+    @apply rounded-full px-4 py-2 text-sm font-semibold text-white shadow-md shadow-violet-500/20;
+    background-image: linear-gradient(
+      120deg,
+      rgb(124 58 237),
+      rgb(192 38 211)
+    );
+  }
+
+  .dark .nav-pill-active {
+    background-image: linear-gradient(
+      120deg,
+      rgb(139 92 246),
+      rgb(217 70 239)
+    );
+    @apply shadow-fuchsia-500/15;
   }
 
   .card-surface {
-    @apply rounded-xl border border-border bg-card text-card-foreground shadow-sm;
+    @apply rounded-2xl border border-border bg-card/95 text-card-foreground shadow-sm ring-1 ring-black/[0.04] backdrop-blur-sm dark:bg-card/90 dark:ring-white/[0.06];
+  }
+
+  .card-surface-interactive {
+    @apply rounded-2xl border border-border bg-card/95 text-card-foreground shadow-sm ring-1 ring-black/[0.04] backdrop-blur-sm transition duration-300 dark:bg-card/90 dark:ring-white/[0.06];
+    @apply hover:border-violet-300/55 hover:shadow-lg hover:shadow-violet-500/[0.07] dark:hover:border-violet-500/30;
   }
 
   .muted-text {
@@ -87,11 +114,25 @@ body {
   }
 
   .btn-primary {
-    @apply rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:opacity-90 disabled:opacity-50;
+    @apply inline-flex items-center justify-center rounded-xl px-4 py-2.5 text-sm font-semibold text-white shadow-md shadow-violet-500/25 transition hover:opacity-92 disabled:pointer-events-none disabled:opacity-50;
+    background-image: linear-gradient(
+      115deg,
+      rgb(124 58 237),
+      rgb(192 38 211)
+    );
+  }
+
+  .dark .btn-primary {
+    background-image: linear-gradient(
+      115deg,
+      rgb(139 92 246),
+      rgb(217 70 239)
+    );
+    @apply shadow-fuchsia-500/12;
   }
 
   .btn-secondary {
-    @apply rounded-lg border border-border bg-card px-4 py-2 text-sm font-medium text-card-foreground hover:bg-muted;
+    @apply inline-flex items-center justify-center rounded-xl border border-border bg-card/90 px-4 py-2.5 text-sm font-medium text-card-foreground backdrop-blur-sm transition hover:border-violet-400/35 hover:bg-muted/80 hover:shadow-md dark:hover:border-violet-500/25;
   }
 
   .btn-ghost {
@@ -117,6 +158,6 @@ body {
   }
 
   .empty-state {
-    @apply rounded-xl border border-border bg-card p-8 text-center text-muted-foreground shadow-sm;
+    @apply rounded-2xl border border-dashed border-border/90 bg-muted/35 p-8 text-center text-muted-foreground ring-1 ring-black/[0.03] backdrop-blur-sm dark:bg-muted/25 dark:ring-white/[0.05];
   }
 }

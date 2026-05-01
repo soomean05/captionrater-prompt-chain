@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { PageHeader } from "@/components/PageHeader";
 import { listFlavors } from "@/lib/db/flavors";
 import { FlavorCreateForm } from "./FlavorCreateForm";
 import { FlavorRow } from "./FlavorRow";
@@ -47,14 +48,14 @@ export default async function FlavorsPage({
   };
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h1 className="text-2xl font-semibold text-foreground">Humor Flavors</h1>
-          <p className="mt-1 muted-text">
-            Create and manage humor flavors and their steps.
-          </p>
-        </div>
+    <div className="space-y-8">
+      <div className="flex flex-col gap-6 lg:flex-row lg:items-start lg:justify-between">
+        <PageHeader
+          eyebrow="Library"
+          title="Humor flavors"
+          description="Search, organize, and open any flavor to edit its ordered prompt chain."
+          className="max-w-xl"
+        />
         <FlavorCreateForm />
       </div>
       <form className="card-surface p-4" method="get">

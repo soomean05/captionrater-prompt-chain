@@ -211,12 +211,18 @@ export function TestForm({ flavors }: { flavors: HumorFlavor[] }) {
               ))}
             </select>
             <p className="mt-1.5 text-xs text-muted-foreground">
-              Sent as{" "}
+              We send{" "}
               <code className="rounded bg-muted px-1 py-0.5 text-[0.68rem]">
                 count
               </code>{" "}
-              when above 1. Responses that pack everything into one string are
-              split into separate lines automatically.
+              /
+              <code className="rounded bg-muted px-1 py-0.5 text-[0.68rem]">
+                captionCount
+              </code>{" "}
+              when you ask for more than one idea. If the API still replies
+              with a single blob, we run follow-up generates (same image +
+              flavor) until we gather enough distinct lines, up to a small
+              safety budget.
             </p>
           </div>
 
