@@ -70,48 +70,25 @@ async function finalizeAlmostCrackdFetch(
   return { ok: true, data: json };
 }
 
-/** Pull caption strings out of heterogeneous AlmostCrackd JSON shapes. */
+/** Pull caption strings from AlmostCrackd responses (including top-level record arrays). */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function extractCaptions(json: any): string[] {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  let candidates: any =
-    json?.captions ??
-    json?.data?.captions ??
-    json?.generated_captions ??
-    json?.results ??
-    json?.data ??
-    json?.caption_request?.captions ??
-    json?.captionRequest?.captions ??
-    json?.llm_responses ??
-    json?.llm_model_responses ??
-    json?.caption_requests ??
-    [];
+  const records = Array.isArray(json)
+    ? json
+    : (json?.captions ??
+      json?.data?.captions ??
+      json?.generated_captions ??
+      json?.results ??
+      json?.data ??
+      []);
 
-  if (
-    (!Array.isArray(candidates) || candidates.length === 0) &&
-    Array.isArray(json?.caption_requests)
-  ) {
-    candidates = json.caption_requests;
-  }
+  if (!Array.isArray(records)) return [];
 
-  if (!Array.isArray(candidates)) return [];
-
-  return candidates
+  return records
     .map((item) => {
       if (typeof item === "string") return item;
-      return (
-        item?.caption ??
-        item?.content ??
-        item?.text ??
-        item?.response ??
-        item?.output ??
-        item?.llm_response ??
-        item?.message ??
-        ""
-      );
+      return item.content ?? item.caption ?? item.text ?? "";
     })
-    .filter(Boolean)
-    .map((s: string) => s.trim())
     .filter(Boolean)
     .slice(0, 5);
 }

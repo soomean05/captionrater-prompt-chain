@@ -122,11 +122,12 @@ export async function runAssignment5TestFlavorCaptions(input: {
     };
   }
 
-  const captions = extractCaptions(gen.data);
+  const captionsJson = gen.data;
+  const captions = extractCaptions(captionsJson);
 
   if (captions.length === 0) {
     throw new Error(
-      `AlmostCrackd returned 0 captions. Raw response: ${JSON.stringify(gen.data)}`
+      `AlmostCrackd returned 0 captions. Raw response: ${JSON.stringify(captionsJson)}`
     );
   }
 
