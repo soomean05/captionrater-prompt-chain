@@ -18,6 +18,16 @@ type HumorFlavorRow = {
 
 let flavorNameColumnPromise: Promise<FlavorNameColumn> | null = null;
 
+export function slugify(value: string) {
+  return value
+    .toLowerCase()
+    .trim()
+    .replace(/[\s_]+/g, "-")
+    .replace(/[^a-z0-9-]/g, "")
+    .replace(/-+/g, "-")
+    .replace(/^-|-$/g, "");
+}
+
 async function detectFlavorNameColumn(): Promise<FlavorNameColumn> {
   const supabase = createAdminClient();
   const candidates: FlavorNameColumn[] = ["label", "title", "description"];
@@ -111,10 +121,12 @@ export async function createFlavor(input: {
 }) {
   const supabase = createAdminClient();
   const flavorNameColumn = await getFlavorNameColumn();
+  const slug = slugify(input.name);
   const { data, error } = await supabase
     .from("humor_flavors")
     .insert({
       [flavorNameColumn]: input.name,
+      slug,
       description: input.description ?? null,
     })
     .select(`id,description,created_datetime_utc,${flavorNameColumn}`)

@@ -6,12 +6,14 @@ import {
   createFlavor,
   updateFlavor,
   deleteFlavor,
+  slugify,
 } from "@/lib/db/flavors";
 
 export async function createFlavorAction(formData: FormData) {
   const name = String(formData.get("name") ?? "").trim();
   const description = String(formData.get("description") ?? "").trim();
   if (!name) return { error: "Name is required" };
+  if (!slugify(name)) return { error: "Please enter a valid flavor name." };
 
   const { data, error } = await createFlavor({ name, description });
   if (error) return { error: error.message };
