@@ -76,6 +76,7 @@ export async function generateCaptions(
   if (apiKey) headers["x-api-key"] = apiKey;
 
   try {
+    console.log("GENERATE TEST ROUTE:", endpoint);
     const res = await fetch(endpoint, {
       method: "POST",
       headers,
