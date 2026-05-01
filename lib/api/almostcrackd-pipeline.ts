@@ -6,11 +6,11 @@
  *   1. POST /pipeline/generate-presigned-url { contentType }
  *   2. PUT presigned URL (bytes, Content-Type: file.type)
  *   3. POST /pipeline/upload-image-from-url { imageUrl: cdnUrl, isCommonUse: false }
- *   4. POST /pipeline/generate-captions body: JSON.stringify({ imageId, humorFlavorId: Number(...) })
+ *   4. POST /pipeline/generate-captions body: JSON.stringify({ imageId, humorFlavorId }) (number or UUID string)
  *
  * Flow B — public URL only (Test page):
  *   POST /pipeline/upload-image-from-url { imageUrl, isCommonUse: false }
- *   POST /pipeline/generate-captions — only imageId + numeric humorFlavorId
+ *   POST /pipeline/generate-captions — only imageId + humorFlavorId (never null)
  */
 
 export function getAlmostCrackdApiBase(): string {
@@ -205,7 +205,28 @@ export function imageIdFromRegisterResponse(data: unknown): string | undefined {
 }
 
 /**
- * Step 4 — ONLY { imageId, humorFlavorId: number }. No prompts, steps, or image URLs.
+ * AlmostCrackd accepts numeric humor flavor IDs (assignment style) OR UUID strings.
+ * Do NOT coerce UUID → Number(...) — that yields NaN, JSON.stringify strips it → null → server errors.
+ */
+export function humorFlavorIdForAlmostCrackd(
+  humorFlavorId: string | number
+): string | number {
+  const raw =
+    typeof humorFlavorId === "number"
+      ? String(Math.trunc(humorFlavorId))
+      : humorFlavorId.trim();
+  if (raw === "") {
+    throw new Error("humorFlavorId is empty before generate-captions.");
+  }
+  if (/^\d+$/.test(raw)) {
+    const n = Number(raw);
+    if (Number.isSafeInteger(n) && n > 0) return n;
+  }
+  return raw;
+}
+
+/**
+ * Step 4 — ONLY { imageId, humorFlavorId }. No prompts, steps, imageUrl, etc.
  */
 export async function requestGenerateCaptions(
   accessToken: string,
@@ -214,19 +235,22 @@ export async function requestGenerateCaptions(
   const baseUrl = getAlmostCrackdApiBase();
   const endpoint = `${baseUrl}/pipeline/generate-captions`;
 
-  const imageId = params.imageId;
-  const humorFlavorId = params.humorFlavorId;
+  const imageId = params.imageId.trim();
 
   const generatePayload = {
     imageId,
-    humorFlavorId: Number(humorFlavorId),
+    humorFlavorId: humorFlavorIdForAlmostCrackd(params.humorFlavorId),
   };
 
   if (!generatePayload.imageId) {
     throw new Error("Missing imageId before generate-captions.");
   }
 
-  if (!generatePayload.humorFlavorId) {
+  if (
+    generatePayload.humorFlavorId === "" ||
+    generatePayload.humorFlavorId === undefined ||
+    generatePayload.humorFlavorId === null
+  ) {
     throw new Error("Missing humorFlavorId before generate-captions.");
   }
 
