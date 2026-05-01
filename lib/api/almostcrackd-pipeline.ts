@@ -70,6 +70,42 @@ async function finalizeAlmostCrackdFetch(
   return { ok: true, data: json };
 }
 
+/** One caption record/string → plain string before trim/replace/display. */
+export function normalizeCaption(item: unknown): string {
+  if (typeof item === "string") return item;
+
+  if (item && typeof item === "object") {
+    const record = item as {
+      content?: unknown;
+      caption?: unknown;
+      text?: unknown;
+      response?: unknown;
+    };
+
+    const value =
+      record.content ??
+      record.caption ??
+      record.text ??
+      record.response ??
+      "";
+
+    return typeof value === "string" ? value : String(value ?? "");
+  }
+
+  return "";
+}
+
+/** Normalize AlmostCrackd caption records to display strings (never call .replace on raw objects). */
+export function captionsFromRecords(rawCaptions: unknown[]): string[] {
+  return rawCaptions
+    .map(normalizeCaption)
+    .map((caption) =>
+      caption.replace(/^["']|["']$/g, "").trim()
+    )
+    .filter(Boolean)
+    .slice(0, 5);
+}
+
 /** Pull caption strings from AlmostCrackd responses (including top-level record arrays). */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function extractCaptions(json: any): string[] {
@@ -84,13 +120,7 @@ export function extractCaptions(json: any): string[] {
 
   if (!Array.isArray(records)) return [];
 
-  return records
-    .map((item) => {
-      if (typeof item === "string") return item;
-      return item.content ?? item.caption ?? item.text ?? "";
-    })
-    .filter(Boolean)
-    .slice(0, 5);
+  return captionsFromRecords(records);
 }
 
 export async function pipelinePost<T = unknown>(

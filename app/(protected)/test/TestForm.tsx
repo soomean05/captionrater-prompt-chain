@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import type { HumorFlavor } from "@/lib/db/flavors";
+import { captionsFromRecords } from "@/lib/api/almostcrackd-pipeline";
 
 const SAMPLE_IMAGE_URL =
   "https://images.unsplash.com/photo-1518780664697-55e3ad937233?w=400";
@@ -86,10 +87,10 @@ export function TestForm({ flavors }: { flavors: HumorFlavor[] }) {
         return;
       }
 
-      const caps = Array.isArray(data.captions) ? data.captions : [];
+      const capsRaw = Array.isArray(data.captions) ? data.captions : [];
       setResult({
         ok: true,
-        captions: caps.filter((x): x is string => typeof x === "string"),
+        captions: captionsFromRecords(capsRaw),
       });
     } catch (err) {
       setResult({
