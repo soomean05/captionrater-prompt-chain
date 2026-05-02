@@ -4,13 +4,32 @@ import type { HumorFlavorStep } from "@/lib/db/steps";
 
 export function StepList({
   flavorId,
+  flavorName,
+  flavorDescription,
   steps,
 }: {
   flavorId: string;
+  flavorName: string | null;
+  flavorDescription: string | null;
   steps: HumorFlavorStep[];
 }) {
   return (
     <div className="space-y-4">
+      <div className="card-surface p-4">
+        <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+          Flavor
+        </p>
+        <p className="mt-1 text-base font-medium text-card-foreground">
+          {flavorName?.trim() ? flavorName : "Unnamed flavor"}
+        </p>
+        {flavorDescription?.trim() ? (
+          <p className="mt-2 text-sm text-muted-foreground">{flavorDescription}</p>
+        ) : (
+          <p className="mt-2 text-sm italic text-muted-foreground">
+            No description
+          </p>
+        )}
+      </div>
       <StepCreateForm flavorId={flavorId} />
       {steps.length === 0 ? (
         <p className="empty-state p-6">

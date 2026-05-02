@@ -67,17 +67,44 @@ export async function makeUniqueFlavorSlug(
 
 async function detectFlavorNameColumn(): Promise<FlavorNameColumn> {
   const supabase = createAdminClient();
-  const candidates: FlavorNameColumn[] = ["label", "title", "description"];
-
-  for (const candidate of candidates) {
+  /** Prefer real title columns so we never treat the body `description` as the name unless necessary. */
+  for (const candidate of ["label", "title"] as const) {
     const { error } = await supabase
       .from("humor_flavors")
       .select(`id,${candidate}`)
       .limit(1);
     if (!error) return candidate;
   }
+  const { error } = await supabase
+    .from("humor_flavors")
+    .select("id,description")
+    .limit(1);
+  if (!error) return "description";
 
   return "description";
+}
+
+const FLAVOR_TITLE_BODY_SEP = "\n\n";
+
+/** When the DB stores title+body in one `description` cell, split for UI. */
+function splitCombinedFlavorDescription(raw: string): {
+  title: string;
+  body: string;
+} {
+  const i = raw.indexOf(FLAVOR_TITLE_BODY_SEP);
+  if (i === -1) {
+    return { title: raw.trim(), body: "" };
+  }
+  return {
+    title: raw.slice(0, i).trim(),
+    body: raw.slice(i + FLAVOR_TITLE_BODY_SEP.length).trim(),
+  };
+}
+
+function combineFlavorTitleAndBody(title: string, body: string): string {
+  const t = title.trim();
+  const b = body.trim();
+  return b ? `${t}${FLAVOR_TITLE_BODY_SEP}${b}` : t;
 }
 
 async function getFlavorNameColumn() {
@@ -91,7 +118,18 @@ function mapFlavor(
   row: HumorFlavorRow,
   flavorNameColumn: FlavorNameColumn
 ): HumorFlavor {
-  const displayName = row[flavorNameColumn];
+  const rawTitle = row[flavorNameColumn];
+  if (flavorNameColumn === "description" && typeof rawTitle === "string") {
+    const { title, body } = splitCombinedFlavorDescription(rawTitle);
+    return {
+      id: row.id,
+      name: title || null,
+      description: body || null,
+      created_datetime_utc: row.created_datetime_utc ?? null,
+    };
+  }
+
+  const displayName = rawTitle;
   return {
     id: row.id,
     name: typeof displayName === "string" ? displayName : null,
@@ -121,9 +159,13 @@ export async function listFlavors(input?: {
     .order("created_datetime_utc", { ascending: false });
 
   if (query) {
-    q = q.or(
-      `${flavorNameColumn}.ilike.%${query}%,description.ilike.%${query}%`
-    );
+    if (flavorNameColumn === "description") {
+      q = q.ilike("description", `%${query}%`);
+    } else {
+      q = q.or(
+        `${flavorNameColumn}.ilike.%${query}%,description.ilike.%${query}%`
+      );
+    }
   }
 
   const { data, error, count } = await q.range(from, to);
@@ -160,15 +202,25 @@ export async function createFlavor(input: {
   const supabase = createAdminClient();
   const flavorNameColumn = await getFlavorNameColumn();
   const slug = await makeUniqueFlavorSlug(supabase, input.name);
+
+  const row: Record<string, unknown> = {
+    created_by_user_id: input.userId,
+    modified_by_user_id: input.userId,
+    slug,
+  };
+  if (flavorNameColumn === "description") {
+    row.description = combineFlavorTitleAndBody(
+      input.name,
+      input.description ?? ""
+    );
+  } else {
+    row[flavorNameColumn] = input.name;
+    row.description = input.description?.trim() || null;
+  }
+
   const { data, error } = await supabase
     .from("humor_flavors")
-    .insert({
-      [flavorNameColumn]: input.name,
-      created_by_user_id: input.userId,
-      modified_by_user_id: input.userId,
-      slug,
-      description: input.description ?? null,
-    })
+    .insert(row)
     .select(`id,description,created_datetime_utc,${flavorNameColumn}`)
     .single();
   return {
@@ -216,25 +268,63 @@ export async function updateFlavor(
   const flavorNameColumn = await getFlavorNameColumn();
   const payload: { description?: string | null; [key: string]: unknown } = {};
   payload.modified_by_user_id = input.userId;
-  if (input.name !== undefined) {
-    const { data: currentFlavor, error: currentFlavorError } = await supabase
-      .from("humor_flavors")
-      .select(`id,${flavorNameColumn},slug`)
-      .eq("id", id)
-      .maybeSingle();
-    if (currentFlavorError) {
-      return { data: null, error: currentFlavorError };
+
+  const { data: currentFlavor, error: currentFlavorError } = await supabase
+    .from("humor_flavors")
+    .select(`id,slug,description,${flavorNameColumn}`)
+    .eq("id", id)
+    .maybeSingle();
+  if (currentFlavorError) {
+    return { data: null, error: currentFlavorError };
+  }
+  const currentRow = (currentFlavor ?? null) as Record<string, unknown> | null;
+  if (!currentRow) {
+    return { data: null, error: { message: "Flavor not found" } };
+  }
+
+  if (flavorNameColumn === "description") {
+    const raw = (currentRow?.[flavorNameColumn] as string) ?? "";
+    const { title: curTitle, body: curBody } = splitCombinedFlavorDescription(
+      raw
+    );
+    const nextTitle =
+      input.name !== undefined ? input.name.trim() : curTitle;
+    const nextBody =
+      input.description !== undefined
+        ? input.description.trim()
+        : curBody;
+    const combined = combineFlavorTitleAndBody(nextTitle, nextBody);
+    if (combined !== raw) {
+      payload.description = combined;
     }
-    const currentRow = (currentFlavor ?? null) as Record<string, unknown> | null;
-    const currentName = (currentRow?.[flavorNameColumn] as string | null) ?? null;
-    if (currentName !== input.name) {
-      payload[flavorNameColumn] = input.name;
-      payload.slug = await makeUniqueFlavorSlug(supabase, input.name, {
+    if (input.name !== undefined && input.name.trim() !== curTitle) {
+      payload.slug = await makeUniqueFlavorSlug(supabase, input.name.trim(), {
         excludeFlavorId: id,
       });
     }
+  } else {
+    if (input.name !== undefined) {
+      const currentName =
+        (currentRow?.[flavorNameColumn] as string | null) ?? null;
+      if (currentName !== input.name) {
+        payload[flavorNameColumn] = input.name;
+        payload.slug = await makeUniqueFlavorSlug(supabase, input.name, {
+          excludeFlavorId: id,
+        });
+      }
+    }
+    if (input.description !== undefined) {
+      payload.description = input.description;
+    }
   }
-  if (input.description !== undefined) payload.description = input.description;
+
+  const hasFieldUpdates = Object.keys(payload).some(
+    (k) => k !== "modified_by_user_id"
+  );
+  if (!hasFieldUpdates) {
+    return await getFlavor(id);
+  }
+
   const { data, error } = await supabase
     .from("humor_flavors")
     .update(payload)

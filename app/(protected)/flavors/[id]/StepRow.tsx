@@ -1,5 +1,6 @@
 "use client";
 
+import { useRouter } from "next/navigation";
 import { useState } from "react";
 import {
   updateStepAction,
@@ -28,6 +29,7 @@ export function StepRow({
   canMoveUp: boolean;
   canMoveDown: boolean;
 }) {
+  const router = useRouter();
   const [editing, setEditing] = useState(false);
   const [pending, setPending] = useState(false);
   const content = getContent(step);
@@ -38,8 +40,11 @@ export function StepRow({
         <form
           action={async (formData) => {
             setPending(true);
-            await updateStepAction(formData);
-            setEditing(false);
+            const result = await updateStepAction(formData);
+            if (!result?.error) {
+              setEditing(false);
+              router.refresh();
+            }
             setPending(false);
           }}
           className="space-y-2"
@@ -88,7 +93,8 @@ export function StepRow({
             <div className="flex shrink-0 flex-wrap gap-1">
               <form
                 action={async (fd) => {
-                  await moveStepUpAction(fd);
+                  const result = await moveStepUpAction(fd);
+                  if (!result?.error) router.refresh();
                 }}
                 className="inline"
               >
@@ -103,7 +109,8 @@ export function StepRow({
               </form>
               <form
                 action={async (fd) => {
-                  await moveStepDownAction(fd);
+                  const result = await moveStepDownAction(fd);
+                  if (!result?.error) router.refresh();
                 }}
                 className="inline"
               >
@@ -125,7 +132,8 @@ export function StepRow({
               </button>
               <form
                 action={async (fd) => {
-                  await deleteStepAction(fd);
+                  const result = await deleteStepAction(fd);
+                  if (!result?.error) router.refresh();
                 }}
                 className="inline"
               >

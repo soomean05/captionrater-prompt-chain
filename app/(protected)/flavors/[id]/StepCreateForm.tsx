@@ -1,9 +1,11 @@
 "use client";
 
+import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { createStepAction } from "./actions";
 
 export function StepCreateForm({ flavorId }: { flavorId: string }) {
+  const router = useRouter();
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -13,6 +15,8 @@ export function StepCreateForm({ flavorId }: { flavorId: string }) {
     const result = await createStepAction(formData);
     if (result?.error) {
       setError(result.error);
+    } else {
+      router.refresh();
     }
     setPending(false);
   }

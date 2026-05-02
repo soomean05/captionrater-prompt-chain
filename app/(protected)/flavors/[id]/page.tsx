@@ -6,6 +6,9 @@ import { listStepsForFlavor } from "@/lib/db/steps";
 import { FlavorEditForm } from "./FlavorEditForm";
 import { StepList } from "./StepList";
 
+/** Fresh flavor + steps after step mutations (revalidatePath + client router.refresh). */
+export const dynamic = "force-dynamic";
+
 export default async function FlavorDetailPage({
   params,
 }: {
@@ -42,7 +45,12 @@ export default async function FlavorDetailPage({
           <span className="h-1 w-6 rounded-full bg-linear-to-r from-violet-500 to-fuchsia-500" aria-hidden />
           Edit flavor
         </h2>
-        <FlavorEditForm flavor={flavor} />
+        <div className="card-surface p-4">
+          <FlavorEditForm
+            key={`${flavor.id}:${flavor.name ?? ""}:${flavor.description ?? ""}`}
+            flavor={flavor}
+          />
+        </div>
       </section>
 
       <section>
@@ -55,7 +63,12 @@ export default async function FlavorDetailPage({
             {stepsError.message}
           </div>
         ) : (
-          <StepList flavorId={id} steps={steps ?? []} />
+          <StepList
+            flavorId={id}
+            flavorName={flavor.name}
+            flavorDescription={flavor.description}
+            steps={steps ?? []}
+          />
         )}
       </section>
     </div>

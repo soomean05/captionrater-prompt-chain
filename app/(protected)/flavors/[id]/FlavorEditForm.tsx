@@ -1,29 +1,41 @@
 "use client";
 
-import { useState } from "react";
+import { useActionState } from "react";
+import { useFormStatus } from "react-dom";
 import { updateFlavorAction, deleteFlavorAction } from "./actions";
 import type { HumorFlavor } from "@/lib/db/flavors";
 
-export function FlavorEditForm({ flavor }: { flavor: HumorFlavor }) {
-  const [pending, setPending] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+type FormState = { error: string } | null;
 
-  async function handleUpdate(formData: FormData) {
-    setPending(true);
-    setError(null);
-    const result = await updateFlavorAction(formData);
-    if (result?.error) {
-      setError(result.error);
-      setPending(false);
-    }
+async function flavorUpdate(
+  _prevState: FormState,
+  formData: FormData
+): Promise<FormState> {
+  const result = await updateFlavorAction(formData);
+  if (result?.error) {
+    return { error: result.error };
   }
+  return null;
+}
+
+function SaveButton() {
+  const { pending } = useFormStatus();
+  return (
+    <button type="submit" disabled={pending} className="btn-primary">
+      {pending ? "Saving…" : "Save"}
+    </button>
+  );
+}
+
+export function FlavorEditForm({ flavor }: { flavor: HumorFlavor }) {
+  const [state, formAction] = useActionState(flavorUpdate, null);
 
   return (
     <div className="space-y-4">
-      {error ? (
-        <p className="text-sm text-danger">{error}</p>
+      {state?.error ? (
+        <p className="text-sm text-danger">{state.error}</p>
       ) : null}
-      <form action={handleUpdate}>
+      <form action={formAction}>
         <input type="hidden" name="id" value={flavor.id} />
         <div className="flex flex-wrap gap-4">
           <input
@@ -41,13 +53,7 @@ export function FlavorEditForm({ flavor }: { flavor: HumorFlavor }) {
             placeholder="Description"
             className="input-base"
           />
-          <button
-            type="submit"
-            disabled={pending}
-            className="btn-primary"
-          >
-            {pending ? "Saving…" : "Save"}
-          </button>
+          <SaveButton />
         </div>
       </form>
       <form
