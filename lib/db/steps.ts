@@ -1,5 +1,12 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 
+/**
+ * AlmostCrackd returns 502 if any step for the flavor has a missing/null/empty
+ * `llm_system_prompt` (e.g. "System prompt missing for humor flavor step …").
+ */
+export const DEFAULT_LLM_SYSTEM_PROMPT =
+  "You are a careful assistant generating image captions. Follow the user prompt instructions.";
+
 const STEP_SELECT = `
   id,
   humor_flavor_id,
@@ -33,9 +40,32 @@ export async function listStepsMinimalForFlavor(humorFlavorId: string) {
   const supabase = createAdminClient();
   return supabase
     .from("humor_flavor_steps")
-    .select("id, order_by, llm_user_prompt")
+    .select("id, order_by, llm_user_prompt, llm_system_prompt")
     .eq("humor_flavor_id", humorFlavorId)
     .order("order_by", { ascending: true });
+}
+
+/** Sets a default system prompt on steps that AlmostCrackd would reject. */
+export async function backfillEmptySystemPromptsForFlavor(
+  flavorId: string,
+  userId: string
+): Promise<{ error: { message: string } | null }> {
+  const supabase = createAdminClient();
+  const { data: steps, error: listErr } = await listStepsForFlavor(flavorId);
+  if (listErr) return { error: listErr };
+
+  for (const step of steps ?? []) {
+    if ((step.llm_system_prompt ?? "").trim() !== "") continue;
+    const { error } = await supabase
+      .from("humor_flavor_steps")
+      .update({
+        llm_system_prompt: DEFAULT_LLM_SYSTEM_PROMPT,
+        modified_by_user_id: userId,
+      })
+      .eq("id", step.id);
+    if (error) return { error };
+  }
+  return { error: null };
 }
 
 export async function listStepsForFlavor(flavorId: string) {
@@ -70,6 +100,7 @@ export async function createStep(input: {
     .insert({
       humor_flavor_id: input.humor_flavor_id,
       order_by: input.orderBy,
+      llm_system_prompt: DEFAULT_LLM_SYSTEM_PROMPT,
       llm_user_prompt: input.llmUserPrompt,
       llm_input_type_id: 1,
       llm_output_type_id: 1,

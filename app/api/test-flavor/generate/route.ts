@@ -1,5 +1,9 @@
 import { createClient } from "@/lib/supabase/server";
-import { listStepsMinimalForFlavor } from "@/lib/db/steps";
+import {
+  backfillEmptySystemPromptsForFlavor,
+  listStepsMinimalForFlavor,
+} from "@/lib/db/steps";
+import { getCurrentUserId } from "@/lib/supabase/current-user";
 import { runAssignment5TestFlavorCaptions } from "@/lib/test-flavor-captions";
 
 function captionBackendOk(): boolean {
@@ -84,6 +88,20 @@ export async function POST(request: Request) {
             "This humor flavor has no steps yet. Add at least one step before testing captions.",
         },
         { status: 400 }
+      );
+    }
+
+    const userId = await getCurrentUserId(supabase);
+    const { error: backfillError } =
+      await backfillEmptySystemPromptsForFlavor(humorFlavorId, userId);
+    if (backfillError) {
+      return Response.json(
+        {
+          error:
+            backfillError.message ??
+            "Could not ensure system prompts on flavor steps.",
+        },
+        { status: 500 }
       );
     }
 
