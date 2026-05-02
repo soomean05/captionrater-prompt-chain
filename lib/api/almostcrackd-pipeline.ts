@@ -430,14 +430,17 @@ export function humorFlavorIdForAlmostCrackd(
 }
 
 /**
- * Step 4 — ONLY { imageId, humorFlavorId }. Extra fields (e.g. count) have triggered
- * AlmostCrackd 500s; assignment spec stays minimal.
+ * Step 4 — body is `{ imageId, humorFlavorId }` plus optional single `count` when
+ * `desiredCaptionCount` is set (omit count entirely with ALMOSTCRACKD_OMIT_GENERATE_COUNT=1).
  */
 export async function requestGenerateCaptions(
   accessToken: string,
   params: {
     imageId: string;
     humorFlavorId: string | number;
+    /** Adds only `count` to the JSON body (not `captionCount`). */
+    desiredCaptionCount?: number;
+    signal?: AbortSignal;
   }
 ): Promise<PipelinePostSuccess<unknown> | PipelinePostFailure> {
   const baseUrl = getAlmostCrackdApiBase();
@@ -445,10 +448,22 @@ export async function requestGenerateCaptions(
 
   const imageId = params.imageId.trim();
 
-  const generatePayload = {
+  const generatePayload: Record<string, unknown> = {
     imageId,
     humorFlavorId: humorFlavorIdForAlmostCrackd(params.humorFlavorId),
   };
+
+  if (
+    process.env.ALMOSTCRACKD_OMIT_GENERATE_COUNT !== "1" &&
+    typeof params.desiredCaptionCount === "number" &&
+    Number.isFinite(params.desiredCaptionCount) &&
+    params.desiredCaptionCount > 1
+  ) {
+    generatePayload.count = Math.min(
+      30,
+      Math.floor(params.desiredCaptionCount)
+    );
+  }
 
   if (!generatePayload.imageId) {
     throw new Error("Missing imageId before generate-captions.");
@@ -473,6 +488,7 @@ export async function requestGenerateCaptions(
       "Content-Type": "application/json",
     },
     body: JSON.stringify(generatePayload),
+    signal: params.signal,
   });
 
   return finalizeAlmostCrackdFetch(captionsRes, endpoint);

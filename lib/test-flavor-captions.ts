@@ -10,8 +10,11 @@ import {
   type PipelinePostFailure,
 } from "@/lib/api/almostcrackd-pipeline";
 
-/** Test lab always asks for this many distinct caption lines (API + follow-up rounds). */
+/** Test lab targets this many distinct caption lines. */
 export const TEST_FLAVOR_TARGET_CAPTION_COUNT = 5;
+
+/** Wall-clock budget for the parallel generate batch (ms). */
+const GENERATE_BATCH_BUDGET_MS = 14_000;
 
 /** Merge caption runs; exact match after trim (case-sensitive) so near-dupes from the model stay distinct. */
 function dedupeExactLines(lines: string[]): string[] {
@@ -127,30 +130,72 @@ export async function runAssignment5TestFlavorCaptions(input: {
 
   const requested = TEST_FLAVOR_TARGET_CAPTION_COUNT;
 
-  const gen = await requestGenerateCaptions(input.accessToken, {
-    imageId,
-    humorFlavorId: flavor.id,
-  });
+  const batchController = new AbortController();
+  const budgetTimer = setTimeout(() => {
+    batchController.abort();
+  }, GENERATE_BATCH_BUDGET_MS);
 
-  if (!gen.ok) {
-    return {
-      ok: false,
-      error: failureMessage(gen),
-      status: 502,
-    };
+  let settled: PromiseSettledResult<
+    Awaited<ReturnType<typeof requestGenerateCaptions>>
+  >[];
+  try {
+    settled = await Promise.allSettled(
+      Array.from({ length: requested }, () =>
+        requestGenerateCaptions(input.accessToken, {
+          imageId,
+          humorFlavorId: flavor.id,
+          desiredCaptionCount: requested,
+          signal: batchController.signal,
+        })
+      )
+    );
+  } finally {
+    clearTimeout(budgetTimer);
   }
 
-  /** One generate-captions call only — extra round-trips dominated latency. */
-  const captions = dedupeExactLines(extractCaptions(gen.data)).slice(
-    0,
-    requested
+  const hadAbort = settled.some(
+    (s) =>
+      s.status === "rejected" &&
+      s.reason instanceof Error &&
+      s.reason.name === "AbortError"
   );
 
-  if (captions.length === 0) {
+  const results = settled.map((s) => {
+    if (s.status === "fulfilled") return s.value;
+    const msg =
+      s.reason instanceof Error ? s.reason.message : "Request failed";
+    return {
+      ok: false as const,
+      status: 502,
+      endpoint: "",
+      message: msg,
+    };
+  });
+
+  const merged = dedupeExactLines(
+    results.flatMap((r) => (r.ok ? extractCaptions(r.data) : []))
+  ).slice(0, requested);
+
+  if (merged.length === 0) {
+    if (hadAbort) {
+      return {
+        ok: false,
+        error: `Caption generation exceeded ${GENERATE_BATCH_BUDGET_MS / 1000}s before any caption returned.`,
+        status: 504,
+      };
+    }
+    const firstFail = results.find((r) => !r.ok);
+    if (firstFail && !firstFail.ok) {
+      return {
+        ok: false,
+        error: failureMessage(firstFail),
+        status: 502,
+      };
+    }
     throw new Error(
-      `AlmostCrackd returned 0 captions. Raw response: ${JSON.stringify(gen.data)}`
+      `AlmostCrackd returned 0 captions from parallel batch. Raw first response: ${JSON.stringify(results[0]?.ok ? results[0].data : results[0])}`
     );
   }
 
-  return { ok: true, captions };
+  return { ok: true, captions: merged };
 }
