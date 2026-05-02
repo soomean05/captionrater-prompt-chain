@@ -6,26 +6,21 @@
  *   1. POST /pipeline/generate-presigned-url { contentType }
  *   2. PUT presigned URL (bytes, Content-Type: file.type)
  *   3. POST /pipeline/upload-image-from-url { imageUrl: cdnUrl, isCommonUse: false }
- *   4. POST /pipeline/generate-captions body: JSON.stringify({ imageId, humorFlavorId }) (number or UUID string)
+ *   4. POST /pipeline/generate-captions body: JSON.stringify({ imageId, humorFlavorId }) only —
+ *      humorFlavorId is a JSON number when the id is all digits, else a UUID string.
  *
  * Flow B — public URL only (Test page):
  *   POST /pipeline/upload-image-from-url { imageUrl, isCommonUse: false }
  *   POST /pipeline/generate-captions — only imageId + humorFlavorId (never null)
  *
- * Test harness (`lib/test-flavor-captions.ts`) defaults to sequential calls **without**
- * optional `count` because AlmostCrackd has returned 500s parsing model prose as JSON when
- * `count`>1. Opt in: `ALMOSTCRACKD_GENERATE_BULK=1` (single call + count) or
- * `ALMOSTCRACKD_PARALLEL_GENERATE=1` (parallel minimal calls).
+ * Test harness (`lib/test-flavor-captions.ts`) calls `generate-captions` with **only**
+ * `{ imageId, humorFlavorId }` (humorFlavorId is a number when the id is all digits, else UUID
+ * string). Caption JSON shape is enforced via humor flavor **step prompts** in Supabase
+ * (`reconcileAlmostCrackdJsonPromptsForFlavor` in `lib/db/steps.ts`).
  *
  * After `upload-image-from-url`, optional `ALMOSTCRACKD_POST_UPLOAD_DELAY_MS` (default 400).
- * For flaky CDN, raise it (e.g. 1200). For speed, `0` skips the wait.
- *
- * Sequential test flow: `ALMOSTCRACKD_SEQUENTIAL_GAP_MS` (default 0) and
- * `ALMOSTCRACKD_SLOT_EXTRA_RETRIES` (default 0). Increase those or `ALMOSTCRACKD_GENERATE_MAX_RETRIES`
- * if AlmostCrackd JSON-parse 500s return.
- *
- * The test harness sends explicit `"count": 1` on minimal runs (disable with
- * `ALMOSTCRACKD_SEND_COUNT_ONE=0`) because their API has behaved differently vs omitting `count`.
+ * Sequential test flow: `ALMOSTCRACKD_SEQUENTIAL_GAP_MS`, `ALMOSTCRACKD_SLOT_EXTRA_RETRIES`,
+ * `ALMOSTCRACKD_GENERATE_MAX_RETRIES` for timing and retries only.
  */
 
 export function getAlmostCrackdApiBase(): string {
@@ -445,8 +440,7 @@ export function humorFlavorIdForAlmostCrackd(
 }
 
 /**
- * Step 4 — body is `{ imageId, humorFlavorId }` plus optional single `count` when
- * `desiredCaptionCount` is set (omit count entirely with ALMOSTCRACKD_OMIT_GENERATE_COUNT=1).
+ * Step 4 — body is **only** `{ imageId, humorFlavorId }` (humorFlavorId number or UUID string).
  *
  * Retries (same payload): `ALMOSTCRACKD_GENERATE_MAX_RETRIES` extra attempts after the first
  * (default 2 → 3 tries, cap 15). Retries on 5xx, 429, and 400 for transient image CDN errors.
@@ -482,13 +476,6 @@ export async function requestGenerateCaptions(
   params: {
     imageId: string;
     humorFlavorId: string | number;
-    /** Adds only `count` to the JSON body (not `captionCount`). */
-    desiredCaptionCount?: number;
-    /**
-     * Send `"count": 1` explicitly. The test harness uses this because AlmostCrackd has returned
-     * 500 JSON-parse errors when `count` was omitted (different server path than `count: 1`).
-     */
-    sendCountOne?: boolean;
   }
 ): Promise<PipelinePostSuccess<unknown> | PipelinePostFailure> {
   const baseUrl = getAlmostCrackdApiBase();
@@ -500,24 +487,6 @@ export async function requestGenerateCaptions(
     imageId,
     humorFlavorId: humorFlavorIdForAlmostCrackd(params.humorFlavorId),
   };
-
-  if (process.env.ALMOSTCRACKD_OMIT_GENERATE_COUNT !== "1") {
-    if (
-      params.sendCountOne &&
-      process.env.ALMOSTCRACKD_SEND_COUNT_ONE !== "0"
-    ) {
-      generatePayload.count = 1;
-    } else if (
-      typeof params.desiredCaptionCount === "number" &&
-      Number.isFinite(params.desiredCaptionCount) &&
-      params.desiredCaptionCount > 1
-    ) {
-      generatePayload.count = Math.min(
-        30,
-        Math.floor(params.desiredCaptionCount)
-      );
-    }
-  }
 
   if (!generatePayload.imageId) {
     throw new Error("Missing imageId before generate-captions.");

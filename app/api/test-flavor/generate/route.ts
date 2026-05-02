@@ -1,7 +1,9 @@
 import { createClient } from "@/lib/supabase/server";
 import {
   backfillEmptySystemPromptsForFlavor,
-  listStepsMinimalForFlavor,
+  listStepsForFlavor,
+  needsAlmostCrackdJsonReconcile,
+  reconcileAlmostCrackdJsonPromptsForFlavor,
 } from "@/lib/db/steps";
 import { getCurrentUserId } from "@/lib/supabase/current-user";
 import { runAssignment5TestFlavorCaptions } from "@/lib/test-flavor-captions";
@@ -75,7 +77,7 @@ export async function POST(request: Request) {
     }
 
     const { data: steps, error: stepsError } =
-      await listStepsMinimalForFlavor(humorFlavorId);
+      await listStepsForFlavor(humorFlavorId);
 
     if (stepsError) {
       throw stepsError;
@@ -103,6 +105,21 @@ export async function POST(request: Request) {
         },
         { status: 500 }
       );
+    }
+
+    const { data: stepsAfterBackfill } = await listStepsForFlavor(humorFlavorId);
+    if (
+      stepsAfterBackfill?.length &&
+      needsAlmostCrackdJsonReconcile(stepsAfterBackfill)
+    ) {
+      const { error: recErr } =
+        await reconcileAlmostCrackdJsonPromptsForFlavor(humorFlavorId, userId);
+      if (recErr) {
+        return Response.json(
+          { error: recErr.message ?? "Could not align step prompts for AlmostCrackd." },
+          { status: 500 }
+        );
+      }
     }
 
     let result;

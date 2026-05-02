@@ -1,5 +1,9 @@
 import { createAdminClient } from "@/lib/supabase/admin";
-import { listStepsForFlavor, createStep } from "@/lib/db/steps";
+import {
+  listStepsForFlavor,
+  createStep,
+  reconcileAlmostCrackdJsonPromptsForFlavor,
+} from "@/lib/db/steps";
 
 type FlavorNameColumn = "label" | "title" | "description";
 
@@ -256,6 +260,12 @@ export async function duplicateFlavor(input: { id: string; userId: string }) {
     });
     if (createStepError) return { data: createdFlavor, error: createStepError };
   }
+
+  const { error: recErr } = await reconcileAlmostCrackdJsonPromptsForFlavor(
+    createdFlavor.id,
+    input.userId
+  );
+  if (recErr) return { data: createdFlavor, error: recErr };
 
   return { data: createdFlavor, error: null };
 }

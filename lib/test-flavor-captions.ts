@@ -15,14 +15,9 @@ import {
 /** Test lab targets this many distinct caption lines. */
 export const TEST_FLAVOR_TARGET_CAPTION_COUNT = 5;
 
-/** N parallel calls, minimal body each (no `count`). */
+/** N parallel calls; body is only `{ imageId, humorFlavorId }` each. */
 function parallelGenerateCaptionsEnabled(): boolean {
   return process.env.ALMOSTCRACKD_PARALLEL_GENERATE?.trim() === "1";
-}
-
-/** One call with `count: N` in the body (fastest when AlmostCrackd handles it). */
-function bulkCountGenerateEnabled(): boolean {
-  return process.env.ALMOSTCRACKD_GENERATE_BULK?.trim() === "1";
 }
 
 /** Merge caption runs; exact match after trim (case-sensitive) so near-dupes from the model stay distinct. */
@@ -44,7 +39,7 @@ function failureMessage(f: PipelinePostFailure): string {
 
 function augmentAlmostCrackdJsonParseError(message: string): string {
   if (!almostcrackdMessageLooksLikeInvalidJsonError(message)) return message;
-  return `${message} This is AlmostCrackd's server parsing model text as JSON (not something your app can fix). Try another image, tweak humor flavor step prompts, or contact AlmostCrackd.`;
+  return `${message} The last humor flavor step must instruct the model to return only valid JSON (array of five caption strings). Re-save steps or run a test after updating prompts in Flavors.`;
 }
 
 /** AlmostCrackd sometimes 400s on generate-captions if their CDN is not ready yet. */
@@ -66,7 +61,7 @@ async function gapBetweenSequentialGenerates(): Promise<void> {
 
 /**
  * Assignment 5: register image (presigned flow or direct imageUrl),
- * then generate-captions with ONLY { imageId, humorFlavorId } (digits → number else UUID string).
+ * then generate-captions with ONLY `{ imageId, humorFlavorId }` (number when id is all digits).
  */
 export async function runAssignment5TestFlavorCaptions(input: {
   accessToken: string;
@@ -163,8 +158,6 @@ export async function runAssignment5TestFlavorCaptions(input: {
 
   const requested = TEST_FLAVOR_TARGET_CAPTION_COUNT;
 
-  /** Default: N sequential minimal calls (no `count`). AlmostCrackd often 500s with
-   * `Unexpected token 'W'… is not valid JSON` when `count`>1 batches non-JSON model text. */
   let results: Array<PipelinePostSuccess<unknown> | PipelinePostFailure>;
 
   if (parallelGenerateCaptionsEnabled()) {
@@ -173,7 +166,6 @@ export async function runAssignment5TestFlavorCaptions(input: {
         requestGenerateCaptions(input.accessToken, {
           imageId,
           humorFlavorId: flavor.id,
-          sendCountOne: true,
         })
       )
     );
@@ -188,13 +180,6 @@ export async function runAssignment5TestFlavorCaptions(input: {
         message: msg,
       };
     });
-  } else if (bulkCountGenerateEnabled()) {
-    const r = await requestGenerateCaptions(input.accessToken, {
-      imageId,
-      humorFlavorId: flavor.id,
-      desiredCaptionCount: requested,
-    });
-    results = [r];
   } else {
     results = [];
     const slotExtraParsed = Number.parseInt(
@@ -211,7 +196,6 @@ export async function runAssignment5TestFlavorCaptions(input: {
       let r = await requestGenerateCaptions(input.accessToken, {
         imageId,
         humorFlavorId: flavor.id,
-        sendCountOne: true,
       });
       let extra = 0;
       while (
@@ -224,7 +208,6 @@ export async function runAssignment5TestFlavorCaptions(input: {
         r = await requestGenerateCaptions(input.accessToken, {
           imageId,
           humorFlavorId: flavor.id,
-          sendCountOne: true,
         });
       }
 

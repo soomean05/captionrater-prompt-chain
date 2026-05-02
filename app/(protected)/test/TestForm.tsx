@@ -151,12 +151,12 @@ export function TestForm({ flavors }: { flavors: HumorFlavor[] }) {
               Generate captions
             </h2>
             <p className="mt-1 text-sm text-muted-foreground">
-              Pick a humor flavor and an image. We run up to five sequential
-              generate-captions calls with{" "}
-              <code className="rounded bg-muted px-1 text-[0.68rem]">count: 1</code>{" "}
-              each (their API has failed when <code className="rounded bg-muted px-1 text-[0.68rem]">count</code>{" "}
-              was omitted). Captions are deduped and capped at five lines; 5xx/429
-              are retried automatically.
+              Pick a humor flavor and an image. Each run calls AlmostCrackd with only{" "}
+              <code className="rounded bg-muted px-1 text-[0.68rem]">imageId</code> and{" "}
+              <code className="rounded bg-muted px-1 text-[0.68rem]">humorFlavorId</code>{" "}
+              (numeric id when applicable). The last flavor step must ask the model for JSON
+              (five caption strings); we align prompts before generate when needed. Up to five
+              sequential calls are merged and deduped; 5xx/429 are retried automatically.
             </p>
           </div>
         </div>
