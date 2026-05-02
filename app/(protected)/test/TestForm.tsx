@@ -202,10 +202,6 @@ export function TestForm({ flavors }: { flavors: HumorFlavor[] }) {
               required={!(imageFile && imageFile.size > 0)}
               className="input-base w-full border-muted bg-background shadow-inner"
             />
-            <p className="mt-1.5 text-xs text-muted-foreground">
-              Or drag in a file — we&apos;ll use the Assignment 5 presigned
-              upload path when you attach an image.
-            </p>
           </div>
 
           <div className="rounded-xl border border-dashed border-muted-foreground/25 bg-muted/40 p-5 transition-colors hover:border-violet-400/35 hover:bg-muted/60 dark:hover:border-violet-500/35">
