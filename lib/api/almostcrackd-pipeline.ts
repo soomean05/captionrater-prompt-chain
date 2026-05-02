@@ -29,6 +29,16 @@ export type PipelinePostFailure = {
 
 export type PipelinePostSuccess<T> = { ok: true; data: T };
 
+function tryParseAlmostCrackdBody(text: string): unknown | undefined {
+  const t = text.trim();
+  if (!t) return undefined;
+  try {
+    return JSON.parse(t) as unknown;
+  } catch {
+    return undefined;
+  }
+}
+
 async function finalizeAlmostCrackdFetch(
   res: Response,
   endpoint: string
@@ -55,19 +65,19 @@ async function finalizeAlmostCrackdFetch(
     };
   }
 
-  let json: unknown;
-  try {
-    json = text ? JSON.parse(text) : null;
-  } catch {
-    throw new Error(`AlmostCrackd returned non-JSON: ${text}`);
-  }
+  const json = tryParseAlmostCrackdBody(text);
 
   if (!res.ok) {
-    const o = json as Record<string, unknown> | null;
+    const o =
+      json && typeof json === "object"
+        ? (json as Record<string, unknown>)
+        : null;
     const msg =
-      (typeof o?.message === "string" && o.message) ||
-      (typeof o?.statusMessage === "string" && o.statusMessage) ||
-      text.slice(0, 400);
+      (o && typeof o.message === "string" && o.message) ||
+      (o && typeof o.statusMessage === "string" && o.statusMessage) ||
+      (json === undefined
+        ? text.trim().slice(0, 500)
+        : JSON.stringify(json).slice(0, 400));
     return {
       ok: false,
       status: res.status,
@@ -76,7 +86,16 @@ async function finalizeAlmostCrackdFetch(
     };
   }
 
-  return { ok: true, data: json };
+  if (json === undefined && text.trim() !== "") {
+    return {
+      ok: false,
+      status: res.status,
+      endpoint,
+      message: `AlmostCrackd returned ${res.status} with non-JSON body at ${endpoint}: ${text.trim().slice(0, 400)}`,
+    };
+  }
+
+  return { ok: true, data: json ?? null };
 }
 
 /** One caption record/string → plain string before trim/replace/display. */
@@ -411,15 +430,14 @@ export function humorFlavorIdForAlmostCrackd(
 }
 
 /**
- * Step 4 — { imageId, humorFlavorId } plus optional hints many APIs accept (safely omitted when unset).
+ * Step 4 — ONLY { imageId, humorFlavorId }. Extra fields (e.g. count) have triggered
+ * AlmostCrackd 500s; assignment spec stays minimal.
  */
 export async function requestGenerateCaptions(
   accessToken: string,
   params: {
     imageId: string;
     humorFlavorId: string | number;
-    /** Requested caption count — sent as `count`/`numCaptions` when greater than 1. */
-    captionCount?: number;
   }
 ): Promise<PipelinePostSuccess<unknown> | PipelinePostFailure> {
   const baseUrl = getAlmostCrackdApiBase();
@@ -427,24 +445,10 @@ export async function requestGenerateCaptions(
 
   const imageId = params.imageId.trim();
 
-  const generatePayload: Record<string, unknown> = {
+  const generatePayload = {
     imageId,
     humorFlavorId: humorFlavorIdForAlmostCrackd(params.humorFlavorId),
   };
-
-  if (
-    typeof params.captionCount === "number" &&
-    Number.isFinite(params.captionCount)
-  ) {
-    const n = Math.min(
-      30,
-      Math.max(1, Math.floor(params.captionCount))
-    );
-    if (n > 1) {
-      generatePayload.count = n;
-      generatePayload.captionCount = n;
-    }
-  }
 
   if (!generatePayload.imageId) {
     throw new Error("Missing imageId before generate-captions.");

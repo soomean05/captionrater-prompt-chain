@@ -130,7 +130,6 @@ export async function runAssignment5TestFlavorCaptions(input: {
   const gen = await requestGenerateCaptions(input.accessToken, {
     imageId,
     humorFlavorId: flavor.id,
-    captionCount: requested,
   });
 
   if (!gen.ok) {

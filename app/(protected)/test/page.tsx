@@ -10,7 +10,7 @@ export default async function TestPage() {
       <PageHeader
         eyebrow="Lab"
         title="Test humor flavor captions"
-        description="Use your saved AlmostCrackd flavor and steps with a public URL or uploaded image. Each run uses a single generate call for speed; we ask for five ideas and parse multi-line or structured replies when present."
+        description="Use your saved AlmostCrackd flavor and steps with a public URL or uploaded image. Each run uses one minimal generate-captions call; we keep up to five parsed caption lines when the response supports it."
       />
 
       {error ? (
