@@ -10,6 +10,9 @@ import {
   type PipelinePostFailure,
 } from "@/lib/api/almostcrackd-pipeline";
 
+/** Test lab always asks for this many distinct caption lines (API + follow-up rounds). */
+export const TEST_FLAVOR_TARGET_CAPTION_COUNT = 5;
+
 /** Merge caption runs; exact match after trim (case-sensitive) so near-dupes from the model stay distinct. */
 function dedupeExactLines(lines: string[]): string[] {
   const seen = new Set<string>();
@@ -38,8 +41,6 @@ export async function runAssignment5TestFlavorCaptions(input: {
   imageUrl?: string;
   /** Optional file — presigned → PUT → register with returned cdnUrl */
   imageFile?: { buffer: Buffer; contentType: string };
-  /** Optional — forwarded as `count` when greater than 1 on generate-captions */
-  captionCount?: number;
 }): Promise<
   | { ok: true; captions: string[] }
   | { ok: false; error: string; status: number }
@@ -124,11 +125,7 @@ export async function runAssignment5TestFlavorCaptions(input: {
     };
   }
 
-  const requested =
-    typeof input.captionCount === "number" &&
-    Number.isFinite(input.captionCount)
-      ? Math.min(30, Math.max(1, Math.floor(input.captionCount)))
-      : undefined;
+  const requested = TEST_FLAVOR_TARGET_CAPTION_COUNT;
 
   const gen = await requestGenerateCaptions(input.accessToken, {
     imageId,
@@ -147,8 +144,8 @@ export async function runAssignment5TestFlavorCaptions(input: {
   let captions = dedupeExactLines(extractCaptions(gen.data));
 
   /** Many backends ignore `count` and only return one string; stitch extra generate calls until we have enough distinct lines or we hit budget. */
-  if (captions.length > 0 && requested !== undefined && requested > 1) {
-    const maxCalls = Math.min(12, requested + 4);
+  if (captions.length > 0 && requested > 1) {
+    const maxCalls = Math.min(15, requested + 6);
     let calls = 1;
     let stale = 0;
     while (captions.length < requested && calls < maxCalls) {

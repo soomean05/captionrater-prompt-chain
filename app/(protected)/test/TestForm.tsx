@@ -7,8 +7,6 @@ import { captionsFromRecords } from "@/lib/api/almostcrackd-pipeline";
 const SAMPLE_IMAGE_URL =
   "https://images.unsplash.com/photo-1518780664697-55e3ad937233?w=400";
 
-const CAPTION_COUNT_OPTIONS = [4, 6, 8, 10] as const;
-
 function IconSpark(props: React.ComponentPropsWithoutRef<"svg">) {
   return (
     <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden {...props}>
@@ -38,7 +36,6 @@ export function TestForm({ flavors }: { flavors: HumorFlavor[] }) {
   const [pending, setPending] = useState(false);
   const [result, setResult] = useState<GenResult | null>(null);
   const [selectedFlavorId, setSelectedFlavorId] = useState("");
-  const [captionCount, setCaptionCount] = useState<(typeof CAPTION_COUNT_OPTIONS)[number]>(8);
   const [imageUrl, setImageUrl] = useState(SAMPLE_IMAGE_URL);
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [copiedIndex, setCopiedIndex] = useState<number | null>(null);
@@ -83,7 +80,6 @@ export function TestForm({ flavors }: { flavors: HumorFlavor[] }) {
       if (imageFile && imageFile.size > 0) {
         const fd = new FormData();
         fd.append("humorFlavorId", selectedFlavorId);
-        fd.append("captionCount", String(captionCount));
         fd.append("image", imageFile);
         res = await fetch("/api/test-flavor/generate", {
           method: "POST",
@@ -98,7 +94,6 @@ export function TestForm({ flavors }: { flavors: HumorFlavor[] }) {
           body: JSON.stringify({
             humorFlavorId: selectedFlavorId,
             imageUrl,
-            captionCount,
           }),
         });
       }
@@ -156,8 +151,9 @@ export function TestForm({ flavors }: { flavors: HumorFlavor[] }) {
               Generate captions
             </h2>
             <p className="mt-1 text-sm text-muted-foreground">
-              Pick a humor flavor and an image. We call AlmostCrackd with your
-              saved steps.
+              Pick a humor flavor and an image. We aim for five caption ideas,
+              calling AlmostCrackd with your saved steps (extra rounds if the
+              first response is short).
             </p>
           </div>
         </div>
@@ -185,45 +181,6 @@ export function TestForm({ flavors }: { flavors: HumorFlavor[] }) {
                 </option>
               ))}
             </select>
-          </div>
-
-          <div>
-            <label
-              htmlFor="caption_count"
-              className="mb-2 block text-xs font-medium uppercase tracking-wide text-muted-foreground"
-            >
-              Caption ideas (requested)
-            </label>
-            <select
-              id="caption_count"
-              value={captionCount}
-              onChange={(e) =>
-                setCaptionCount(
-                  Number(e.target.value) as (typeof CAPTION_COUNT_OPTIONS)[number]
-                )
-              }
-              className="input-base w-full border-muted bg-background shadow-inner"
-            >
-              {CAPTION_COUNT_OPTIONS.map((n) => (
-                <option key={n} value={n}>
-                  {n} captions
-                </option>
-              ))}
-            </select>
-            <p className="mt-1.5 text-xs text-muted-foreground">
-              We send{" "}
-              <code className="rounded bg-muted px-1 py-0.5 text-[0.68rem]">
-                count
-              </code>{" "}
-              /
-              <code className="rounded bg-muted px-1 py-0.5 text-[0.68rem]">
-                captionCount
-              </code>{" "}
-              when you ask for more than one idea. If the API still replies
-              with a single blob, we run follow-up generates (same image +
-              flavor) until we gather enough distinct lines, up to a small
-              safety budget.
-            </p>
           </div>
 
           <div>
@@ -336,7 +293,7 @@ export function TestForm({ flavors }: { flavors: HumorFlavor[] }) {
                   <div className="h-3 w-3/4 rounded-full bg-muted" />
                 </div>
               </div>
-              {[1, 2, 3].map((k) => (
+              {[1, 2, 3, 4, 5].map((k) => (
                 <div
                   key={k}
                   className="space-y-3 rounded-xl border border-border bg-muted/40 p-4"
