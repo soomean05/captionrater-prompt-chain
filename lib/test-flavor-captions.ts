@@ -1,5 +1,6 @@
 import { getFlavor } from "@/lib/db/flavors";
 import {
+  almostcrackdMessageLooksLikeInvalidJsonError,
   extractCaptions,
   generatePresignedUrl,
   imageIdFromRegisterResponse,
@@ -48,6 +49,14 @@ async function waitAfterImageRegister(): Promise<void> {
   if (!Number.isFinite(ms) || ms <= 0) return;
   const clamped = Math.min(20_000, ms);
   await new Promise((r) => setTimeout(r, clamped));
+}
+
+/** Space sequential generate calls so AlmostCrackd is less hammered (default 450ms). */
+async function gapBetweenSequentialGenerates(): Promise<void> {
+  const raw = process.env.ALMOSTCRACKD_SEQUENTIAL_GAP_MS ?? "450";
+  const ms = Number.parseInt(raw, 10);
+  if (!Number.isFinite(ms) || ms <= 0) return;
+  await new Promise((r) => setTimeout(r, Math.min(10_000, ms)));
 }
 
 /**
@@ -182,11 +191,35 @@ export async function runAssignment5TestFlavorCaptions(input: {
     results = [r];
   } else {
     results = [];
+    const slotExtraParsed = Number.parseInt(
+      process.env.ALMOSTCRACKD_SLOT_EXTRA_RETRIES ?? "2",
+      10
+    );
+    const slotExtraMax = Number.isFinite(slotExtraParsed)
+      ? Math.min(6, Math.max(0, slotExtraParsed))
+      : 2;
+
     for (let i = 0; i < requested; i++) {
-      const r = await requestGenerateCaptions(input.accessToken, {
+      if (i > 0) await gapBetweenSequentialGenerates();
+
+      let r = await requestGenerateCaptions(input.accessToken, {
         imageId,
         humorFlavorId: flavor.id,
       });
+      let extra = 0;
+      while (
+        !r.ok &&
+        extra < slotExtraMax &&
+        almostcrackdMessageLooksLikeInvalidJsonError(failureMessage(r))
+      ) {
+        extra++;
+        await new Promise((res) => setTimeout(res, Math.min(8_000, 650 * extra)));
+        r = await requestGenerateCaptions(input.accessToken, {
+          imageId,
+          humorFlavorId: flavor.id,
+        });
+      }
+
       results.push(r);
       if (!r.ok) {
         const mergedSoFar = dedupeExactLines(

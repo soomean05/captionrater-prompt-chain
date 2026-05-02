@@ -19,6 +19,9 @@
  *
  * After `upload-image-from-url`, the test flow waits `ALMOSTCRACKD_POST_UPLOAD_DELAY_MS` (default
  * 1200) before generate-captions so `images.almostcrackd.ai` can serve the new object.
+ *
+ * Sequential test runs also use `ALMOSTCRACKD_SEQUENTIAL_GAP_MS` (default 450) and per-slot
+ * `ALMOSTCRACKD_SLOT_EXTRA_RETRIES` (default 2) for AlmostCrackd's flaky JSON-parse 500s.
  */
 
 export function getAlmostCrackdApiBase(): string {
@@ -442,9 +445,21 @@ export function humorFlavorIdForAlmostCrackd(
  * `desiredCaptionCount` is set (omit count entirely with ALMOSTCRACKD_OMIT_GENERATE_COUNT=1).
  *
  * Retries (same payload): `ALMOSTCRACKD_GENERATE_MAX_RETRIES` = extra attempts after the first
- * (default 2 → 3 tries). Retries on 5xx, 429, and 400 when the message looks like a transient
- * failure to fetch the registered image from AlmostCrackd CDN (e.g. "Error while downloading ...").
+ * (default 6 → 7 tries, cap 15). Retries on 5xx, 429, and 400 for transient image CDN errors.
+ * Backoff is longer when the last failure looked like AlmostCrackd's broken JSON.parse on model
+ * text ("Unexpected token … is not valid JSON").
  */
+export function almostcrackdMessageLooksLikeInvalidJsonError(
+  message: string
+): boolean {
+  const m = message.toLowerCase();
+  return (
+    m.includes("not valid json") ||
+    m.includes("is not valid json") ||
+    m.includes("unexpected token")
+  );
+}
+
 function isRetryableGenerateCaptionsFailure(
   out: PipelinePostFailure
 ): boolean {
@@ -508,26 +523,31 @@ export async function requestGenerateCaptions(
 
   const bodyJson = JSON.stringify(generatePayload);
   const parsedRetries = Number.parseInt(
-    process.env.ALMOSTCRACKD_GENERATE_MAX_RETRIES ?? "2",
+    process.env.ALMOSTCRACKD_GENERATE_MAX_RETRIES ?? "6",
     10
   );
   const extraRetries = Number.isFinite(parsedRetries)
-    ? Math.min(5, Math.max(0, parsedRetries))
-    : 2;
+    ? Math.min(15, Math.max(0, parsedRetries))
+    : 6;
   const maxAttempts = 1 + extraRetries;
 
   let last: PipelinePostSuccess<unknown> | PipelinePostFailure | null = null;
+  let lastFailMessage = "";
 
   for (let attempt = 0; attempt < maxAttempts; attempt++) {
     if (attempt > 0) {
-      const delayMs = Math.min(12_000, 400 * 2 ** (attempt - 1));
+      const jsonBug = almostcrackdMessageLooksLikeInvalidJsonError(lastFailMessage);
+      const capMs = jsonBug ? 28_000 : 14_000;
+      const baseMs = jsonBug ? 900 : 500;
+      const delayMs = Math.min(capMs, baseMs * 2 ** (attempt - 1));
       await new Promise((r) => setTimeout(r, delayMs));
       if (process.env.DEBUG_ALMOSTCRACKD === "1") {
         console.log(
           "AlmostCrackd generate-captions retry",
           attempt + 1,
           "/",
-          maxAttempts
+          maxAttempts,
+          jsonBug ? "(json-parse-ish backoff)" : ""
         );
       }
     }
@@ -545,6 +565,7 @@ export async function requestGenerateCaptions(
     last = out;
     if (out.ok) return out;
 
+    lastFailMessage = out.message;
     const retryable = isRetryableGenerateCaptionsFailure(out);
     if (!retryable) return out;
   }
