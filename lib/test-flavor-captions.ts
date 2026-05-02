@@ -143,29 +143,34 @@ export async function runAssignment5TestFlavorCaptions(input: {
 
   let captions = dedupeExactLines(extractCaptions(gen.data));
 
-  /** Many backends ignore `count` and only return one string; stitch extra generate calls until we have enough distinct lines or we hit budget. */
-  if (captions.length > 0 && requested > 1) {
-    const maxCalls = Math.min(15, requested + 6);
-    let calls = 1;
-    let stale = 0;
-    while (captions.length < requested && calls < maxCalls) {
-      const prevLen = captions.length;
-      const next = await requestGenerateCaptions(input.accessToken, {
-        imageId,
-        humorFlavorId: flavor.id,
-        captionCount: requested,
-      });
-      if (!next.ok) break;
-      calls += 1;
-      captions = dedupeExactLines([
-        ...captions,
-        ...extractCaptions(next.data),
-      ]);
-      if (captions.length === prevLen) {
-        stale += 1;
-        if (stale >= 2) break;
-      } else {
-        stale = 0;
+  /**
+   * Many backends ignore `count` or return one blob. Extra generates used to be
+   * sequential (very slow). We fire small parallel batches instead — wall clock is
+   * ~one round-trip per batch, not N sequential waits.
+   */
+  const MAX_PARALLEL_PER_WAVE = 6;
+  const MAX_WAVES = 2;
+
+  if (captions.length < requested) {
+    for (let wave = 0; wave < MAX_WAVES && captions.length < requested; wave++) {
+      const needed = requested - captions.length;
+      const slots = Math.min(needed, MAX_PARALLEL_PER_WAVE);
+      const results = await Promise.all(
+        Array.from({ length: slots }, () =>
+          requestGenerateCaptions(input.accessToken, {
+            imageId,
+            humorFlavorId: flavor.id,
+            captionCount: requested,
+          })
+        )
+      );
+      for (const r of results) {
+        if (r.ok) {
+          captions = dedupeExactLines([
+            ...captions,
+            ...extractCaptions(r.data),
+          ]);
+        }
       }
     }
     captions = captions.slice(0, requested);
