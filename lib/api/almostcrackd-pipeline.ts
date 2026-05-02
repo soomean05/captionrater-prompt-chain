@@ -16,6 +16,9 @@
  * optional `count` because AlmostCrackd has returned 500s parsing model prose as JSON when
  * `count`>1. Opt in: `ALMOSTCRACKD_GENERATE_BULK=1` (single call + count) or
  * `ALMOSTCRACKD_PARALLEL_GENERATE=1` (parallel minimal calls).
+ *
+ * After `upload-image-from-url`, the test flow waits `ALMOSTCRACKD_POST_UPLOAD_DELAY_MS` (default
+ * 1200) before generate-captions so `images.almostcrackd.ai` can serve the new object.
  */
 
 export function getAlmostCrackdApiBase(): string {
@@ -438,9 +441,24 @@ export function humorFlavorIdForAlmostCrackd(
  * Step 4 — body is `{ imageId, humorFlavorId }` plus optional single `count` when
  * `desiredCaptionCount` is set (omit count entirely with ALMOSTCRACKD_OMIT_GENERATE_COUNT=1).
  *
- * Retries (same payload): set `ALMOSTCRACKD_GENERATE_MAX_RETRIES` to extra attempts after the
- * first (default 2 → 3 tries total) for 5xx and 429 only.
+ * Retries (same payload): `ALMOSTCRACKD_GENERATE_MAX_RETRIES` = extra attempts after the first
+ * (default 2 → 3 tries). Retries on 5xx, 429, and 400 when the message looks like a transient
+ * failure to fetch the registered image from AlmostCrackd CDN (e.g. "Error while downloading ...").
  */
+function isRetryableGenerateCaptionsFailure(
+  out: PipelinePostFailure
+): boolean {
+  if (out.status >= 500 || out.status === 429) return true;
+  if (out.status !== 400) return false;
+  const m = out.message.toLowerCase();
+  return (
+    m.includes("error while downloading") ||
+    m.includes("while downloading http") ||
+    m.includes("failed to download") ||
+    m.includes("could not download")
+  );
+}
+
 export async function requestGenerateCaptions(
   accessToken: string,
   params: {
@@ -527,7 +545,7 @@ export async function requestGenerateCaptions(
     last = out;
     if (out.ok) return out;
 
-    const retryable = out.status >= 500 || out.status === 429;
+    const retryable = isRetryableGenerateCaptionsFailure(out);
     if (!retryable) return out;
   }
 

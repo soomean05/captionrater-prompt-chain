@@ -41,6 +41,15 @@ function failureMessage(f: PipelinePostFailure): string {
   return f.message;
 }
 
+/** AlmostCrackd sometimes 400s on generate-captions if their CDN is not ready yet. */
+async function waitAfterImageRegister(): Promise<void> {
+  const raw = process.env.ALMOSTCRACKD_POST_UPLOAD_DELAY_MS ?? "1200";
+  const ms = Number.parseInt(raw, 10);
+  if (!Number.isFinite(ms) || ms <= 0) return;
+  const clamped = Math.min(20_000, ms);
+  await new Promise((r) => setTimeout(r, clamped));
+}
+
 /**
  * Assignment 5: register image (presigned flow or direct imageUrl),
  * then generate-captions with ONLY { imageId, humorFlavorId } (digits → number else UUID string).
@@ -135,6 +144,8 @@ export async function runAssignment5TestFlavorCaptions(input: {
       status: 502,
     };
   }
+
+  await waitAfterImageRegister();
 
   const requested = TEST_FLAVOR_TARGET_CAPTION_COUNT;
 
