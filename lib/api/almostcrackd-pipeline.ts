@@ -34,8 +34,17 @@ async function finalizeAlmostCrackdFetch(
   endpoint: string
 ): Promise<PipelinePostSuccess<unknown> | PipelinePostFailure> {
   const text = await res.text();
-  console.log("AlmostCrackd status:", res.status);
-  console.log("AlmostCrackd raw response:", text);
+  if (process.env.DEBUG_ALMOSTCRACKD === "1") {
+    console.log("AlmostCrackd status:", res.status, endpoint);
+    console.log("AlmostCrackd raw response:", text);
+  } else {
+    console.log(
+      "AlmostCrackd",
+      res.status,
+      endpoint.replace(getAlmostCrackdApiBase(), ""),
+      `${text.length}b`
+    );
+  }
 
   if (res.status === 405) {
     return {
@@ -344,7 +353,9 @@ export async function putBytesToPresignedUrl(
     body: bytes as BodyInit,
   });
   const text = await res.text();
-  console.log("AlmostCrackd presigned PUT status:", res.status);
+  if (process.env.DEBUG_ALMOSTCRACKD === "1") {
+    console.log("AlmostCrackd presigned PUT status:", res.status);
+  }
 
   if (!res.ok) {
     return {
@@ -447,7 +458,9 @@ export async function requestGenerateCaptions(
     throw new Error("Missing humorFlavorId before generate-captions.");
   }
 
-  console.log("FINAL generate-captions payload:", generatePayload);
+  if (process.env.DEBUG_ALMOSTCRACKD === "1") {
+    console.log("FINAL generate-captions payload:", generatePayload);
+  }
 
   const captionsRes = await fetch(endpoint, {
     method: "POST",

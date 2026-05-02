@@ -141,40 +141,11 @@ export async function runAssignment5TestFlavorCaptions(input: {
     };
   }
 
-  let captions = dedupeExactLines(extractCaptions(gen.data));
-
-  /**
-   * Many backends ignore `count` or return one blob. Extra generates used to be
-   * sequential (very slow). We fire small parallel batches instead — wall clock is
-   * ~one round-trip per batch, not N sequential waits.
-   */
-  const MAX_PARALLEL_PER_WAVE = 6;
-  const MAX_WAVES = 2;
-
-  if (captions.length < requested) {
-    for (let wave = 0; wave < MAX_WAVES && captions.length < requested; wave++) {
-      const needed = requested - captions.length;
-      const slots = Math.min(needed, MAX_PARALLEL_PER_WAVE);
-      const results = await Promise.all(
-        Array.from({ length: slots }, () =>
-          requestGenerateCaptions(input.accessToken, {
-            imageId,
-            humorFlavorId: flavor.id,
-            captionCount: requested,
-          })
-        )
-      );
-      for (const r of results) {
-        if (r.ok) {
-          captions = dedupeExactLines([
-            ...captions,
-            ...extractCaptions(r.data),
-          ]);
-        }
-      }
-    }
-    captions = captions.slice(0, requested);
-  }
+  /** One generate-captions call only — extra round-trips dominated latency. */
+  const captions = dedupeExactLines(extractCaptions(gen.data)).slice(
+    0,
+    requested
+  );
 
   if (captions.length === 0) {
     throw new Error(

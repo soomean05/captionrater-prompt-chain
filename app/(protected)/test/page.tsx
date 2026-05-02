@@ -10,7 +10,7 @@ export default async function TestPage() {
       <PageHeader
         eyebrow="Lab"
         title="Test humor flavor captions"
-        description="Use your saved AlmostCrackd flavor and steps with a public URL or uploaded image. Each run targets five caption ideas; we stitch extra API rounds when responses are thin."
+        description="Use your saved AlmostCrackd flavor and steps with a public URL or uploaded image. Each run uses a single generate call for speed; we ask for five ideas and parse multi-line or structured replies when present."
       />
 
       {error ? (
