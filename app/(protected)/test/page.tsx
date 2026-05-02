@@ -9,11 +9,7 @@ export default async function TestPage() {
 
   return (
     <div className="space-y-10">
-      <PageHeader
-        eyebrow="Lab"
-        title="Test humor flavor captions"
-        description="Use your saved AlmostCrackd flavor and steps with a public URL or uploaded image. AlmostCrackd receives only imageId and humorFlavorId; the last step prompts must require valid JSON (five strings). Sequential runs merge lines; optional parallel mode via env."
-      />
+      <PageHeader eyebrow="Lab" title="Test humor flavor captions" />
 
       {error ? (
         <div className="alert-error rounded-xl border px-5 py-4">

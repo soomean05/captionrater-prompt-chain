@@ -90,10 +90,7 @@ export function StepRow({
         <>
           <div className="flex items-start justify-between gap-4">
             <div className="min-w-0 flex-1">
-              <span className="mr-2 inline-flex h-6 w-6 items-center justify-center rounded-full bg-muted text-xs font-medium text-muted-foreground">
-                {(step as { order_by?: number }).order_by ?? "?"}
-              </span>
-              <p className="mt-1 whitespace-pre-wrap text-sm text-card-foreground">
+              <p className="whitespace-pre-wrap text-sm text-card-foreground">
                 {content || "—"}
               </p>
             </div>
