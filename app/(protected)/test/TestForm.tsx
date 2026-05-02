@@ -152,9 +152,10 @@ export function TestForm({ flavors }: { flavors: HumorFlavor[] }) {
             </h2>
             <p className="mt-1 text-sm text-muted-foreground">
               Pick a humor flavor and an image. We run five parallel
-              generate-captions calls (same minimal body plus optional{" "}
+              generate-captions calls (minimal body plus optional{" "}
               <code className="rounded bg-muted px-1 text-[0.68rem]">count</code>
-              ) and merge distinct lines, with a ~14s total budget for that batch.
+              ) and merge distinct lines — no artificial timeout so AlmostCrackd
+              can finish.
             </p>
           </div>
         </div>

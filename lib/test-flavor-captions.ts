@@ -13,9 +13,6 @@ import {
 /** Test lab targets this many distinct caption lines. */
 export const TEST_FLAVOR_TARGET_CAPTION_COUNT = 5;
 
-/** Wall-clock budget for the parallel generate batch (ms). */
-const GENERATE_BATCH_BUDGET_MS = 14_000;
-
 /** Merge caption runs; exact match after trim (case-sensitive) so near-dupes from the model stay distinct. */
 function dedupeExactLines(lines: string[]): string[] {
   const seen = new Set<string>();
@@ -130,34 +127,14 @@ export async function runAssignment5TestFlavorCaptions(input: {
 
   const requested = TEST_FLAVOR_TARGET_CAPTION_COUNT;
 
-  const batchController = new AbortController();
-  const budgetTimer = setTimeout(() => {
-    batchController.abort();
-  }, GENERATE_BATCH_BUDGET_MS);
-
-  let settled: PromiseSettledResult<
-    Awaited<ReturnType<typeof requestGenerateCaptions>>
-  >[];
-  try {
-    settled = await Promise.allSettled(
-      Array.from({ length: requested }, () =>
-        requestGenerateCaptions(input.accessToken, {
-          imageId,
-          humorFlavorId: flavor.id,
-          desiredCaptionCount: requested,
-          signal: batchController.signal,
-        })
-      )
-    );
-  } finally {
-    clearTimeout(budgetTimer);
-  }
-
-  const hadAbort = settled.some(
-    (s) =>
-      s.status === "rejected" &&
-      s.reason instanceof Error &&
-      s.reason.name === "AbortError"
+  const settled = await Promise.allSettled(
+    Array.from({ length: requested }, () =>
+      requestGenerateCaptions(input.accessToken, {
+        imageId,
+        humorFlavorId: flavor.id,
+        desiredCaptionCount: requested,
+      })
+    )
   );
 
   const results = settled.map((s) => {
@@ -177,13 +154,6 @@ export async function runAssignment5TestFlavorCaptions(input: {
   ).slice(0, requested);
 
   if (merged.length === 0) {
-    if (hadAbort) {
-      return {
-        ok: false,
-        error: `Caption generation exceeded ${GENERATE_BATCH_BUDGET_MS / 1000}s before any caption returned.`,
-        status: 504,
-      };
-    }
     const firstFail = results.find((r) => !r.ok);
     if (firstFail && !firstFail.ok) {
       return {

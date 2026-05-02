@@ -440,7 +440,6 @@ export async function requestGenerateCaptions(
     humorFlavorId: string | number;
     /** Adds only `count` to the JSON body (not `captionCount`). */
     desiredCaptionCount?: number;
-    signal?: AbortSignal;
   }
 ): Promise<PipelinePostSuccess<unknown> | PipelinePostFailure> {
   const baseUrl = getAlmostCrackdApiBase();
@@ -488,7 +487,6 @@ export async function requestGenerateCaptions(
       "Content-Type": "application/json",
     },
     body: JSON.stringify(generatePayload),
-    signal: params.signal,
   });
 
   return finalizeAlmostCrackdFetch(captionsRes, endpoint);
