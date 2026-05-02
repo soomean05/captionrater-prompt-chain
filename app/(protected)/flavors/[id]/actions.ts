@@ -100,10 +100,7 @@ export async function deleteStepAction(formData: FormData) {
   const id = String(formData.get("id") ?? "");
   const flavorId = String(formData.get("humor_flavor_id") ?? "");
   if (!id) return { error: "ID is required" };
-  const supabase = await createClient();
-  const userId = await getCurrentUserId(supabase);
-
-  const { error } = await deleteStep(id, { reconcileUserId: userId });
+  const { error } = await deleteStep(id);
   if (error) return { error: error.message };
   revalidatePath("/flavors", "layout");
   revalidatePath("/flavors");
@@ -114,9 +111,7 @@ export async function deleteStepAction(formData: FormData) {
 export async function moveStepUpAction(formData: FormData) {
   const id = String(formData.get("id") ?? "");
   if (!id) return { error: "ID is required" };
-  const supabase = await createClient();
-  const userId = await getCurrentUserId(supabase);
-  const { error } = await reorderStep(id, "up", userId);
+  const { error } = await reorderStep(id, "up");
   if (error) return { error: error.message };
   const { data: step } = await import("@/lib/db/steps").then((m) => m.getStep(id));
   if (step) {
@@ -130,9 +125,7 @@ export async function moveStepUpAction(formData: FormData) {
 export async function moveStepDownAction(formData: FormData) {
   const id = String(formData.get("id") ?? "");
   if (!id) return { error: "ID is required" };
-  const supabase = await createClient();
-  const userId = await getCurrentUserId(supabase);
-  const { error } = await reorderStep(id, "down", userId);
+  const { error } = await reorderStep(id, "down");
   if (error) return { error: error.message };
   const { data: step } = await import("@/lib/db/steps").then((m) => m.getStep(id));
   if (step) {

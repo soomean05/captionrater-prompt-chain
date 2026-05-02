@@ -32,16 +32,23 @@ export function StepRow({
   const router = useRouter();
   const [editing, setEditing] = useState(false);
   const [pending, setPending] = useState(false);
+  const [actionError, setActionError] = useState<string | null>(null);
   const content = getContent(step);
 
   return (
     <div className="card-surface p-4">
+      {actionError ? (
+        <p className="mb-2 text-sm text-danger">{actionError}</p>
+      ) : null}
       {editing ? (
         <form
           action={async (formData) => {
             setPending(true);
+            setActionError(null);
             const result = await updateStepAction(formData);
-            if (!result?.error) {
+            if (result?.error) {
+              setActionError(result.error);
+            } else {
               setEditing(false);
               router.refresh();
             }
@@ -93,8 +100,13 @@ export function StepRow({
             <div className="flex shrink-0 flex-wrap gap-1">
               <form
                 action={async (fd) => {
+                  setActionError(null);
                   const result = await moveStepUpAction(fd);
-                  if (!result?.error) router.refresh();
+                  if (result?.error) {
+                    setActionError(result.error);
+                  } else {
+                    router.refresh();
+                  }
                 }}
                 className="inline"
               >
@@ -109,8 +121,13 @@ export function StepRow({
               </form>
               <form
                 action={async (fd) => {
+                  setActionError(null);
                   const result = await moveStepDownAction(fd);
-                  if (!result?.error) router.refresh();
+                  if (result?.error) {
+                    setActionError(result.error);
+                  } else {
+                    router.refresh();
+                  }
                 }}
                 className="inline"
               >
@@ -125,15 +142,23 @@ export function StepRow({
               </form>
               <button
                 type="button"
-                onClick={() => setEditing(true)}
+                onClick={() => {
+                  setActionError(null);
+                  setEditing(true);
+                }}
                 className="btn-ghost text-xs font-medium"
               >
                 Edit
               </button>
               <form
                 action={async (fd) => {
+                  setActionError(null);
                   const result = await deleteStepAction(fd);
-                  if (!result?.error) router.refresh();
+                  if (result?.error) {
+                    setActionError(result.error);
+                  } else {
+                    router.refresh();
+                  }
                 }}
                 className="inline"
               >

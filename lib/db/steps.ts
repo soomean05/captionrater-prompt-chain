@@ -97,6 +97,9 @@ export async function listStepsForFlavor(flavorId: string) {
 /**
  * Ensures the **last** step (by `order_by`) uses the AlmostCrackd JSON caption contract.
  * Non-final steps with **empty** user+system prompts get intermediate defaults.
+ *
+ * Called from duplicate-flavor and test-caption generate only — not from create/reorder/delete
+ * so users can edit steps freely on the flavor detail page.
  */
 export async function reconcileAlmostCrackdJsonPromptsForFlavor(
   flavorId: string,
@@ -192,13 +195,6 @@ export async function createStep(input: {
     })
     .select(STEP_SELECT)
     .single();
-  if (!error) {
-    const rec = await reconcileAlmostCrackdJsonPromptsForFlavor(
-      input.humor_flavor_id,
-      input.userId
-    );
-    if (rec.error) return { data: data as HumorFlavorStep | null, error: rec.error };
-  }
   return { data: data as HumorFlavorStep | null, error };
 }
 
@@ -222,32 +218,15 @@ export async function updateStep(
   return { data: data as HumorFlavorStep | null, error };
 }
 
-export async function deleteStep(
-  id: string,
-  options?: { reconcileUserId?: string }
-) {
+export async function deleteStep(id: string) {
   const supabase = createAdminClient();
-  const { data: before } = await getStep(id);
-  const flavorId = before?.humor_flavor_id;
   const { error } = await supabase.from("humor_flavor_steps").delete().eq("id", id);
-  if (
-    !error &&
-    flavorId &&
-    options?.reconcileUserId
-  ) {
-    const rec = await reconcileAlmostCrackdJsonPromptsForFlavor(
-      flavorId,
-      options.reconcileUserId
-    );
-    if (rec.error) return { error: rec.error };
-  }
   return { error };
 }
 
 export async function reorderStep(
   id: string,
-  direction: "up" | "down",
-  userIdForReconcile?: string
+  direction: "up" | "down"
 ): Promise<{ error: { message: string } | null }> {
   const supabase = createAdminClient();
   const { data: step, error: stepErr } = await getStep(id);
@@ -279,14 +258,6 @@ export async function reorderStep(
     .update({ order_by: currentNum })
     .eq("id", otherStep.id);
   if (u2) return { error: u2 };
-
-  if (userIdForReconcile) {
-    const rec = await reconcileAlmostCrackdJsonPromptsForFlavor(
-      step.humor_flavor_id,
-      userIdForReconcile
-    );
-    if (rec.error) return { error: rec.error };
-  }
 
   return { error: null };
 }
