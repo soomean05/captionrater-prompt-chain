@@ -2,6 +2,8 @@ import { PageHeader } from "@/components/PageHeader";
 import { listFlavors } from "@/lib/db/flavors";
 import { TestForm } from "./TestForm";
 
+export const dynamic = "force-dynamic";
+
 export default async function TestPage() {
   const { data: flavors, error } = await listFlavors();
 

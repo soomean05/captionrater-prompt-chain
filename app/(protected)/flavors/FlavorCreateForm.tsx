@@ -1,26 +1,38 @@
 "use client";
 
-import { useState } from "react";
+import { useActionState } from "react";
+import { useFormStatus } from "react-dom";
 import { createFlavorAction } from "./actions";
 
-export function FlavorCreateForm({ className }: { className?: string }) {
-  const [pending, setPending] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+type FormState = { error: string } | null;
 
-  async function handleSubmit(formData: FormData) {
-    setPending(true);
-    setError(null);
-    const result = await createFlavorAction(formData);
-    if (result?.error) {
-      setError(result.error);
-      setPending(false);
-    }
+async function flavorCreate(
+  _prevState: FormState,
+  formData: FormData
+): Promise<FormState> {
+  const result = await createFlavorAction(formData);
+  if (result?.error) {
+    return { error: result.error };
   }
+  return null;
+}
+
+function SubmitButton() {
+  const { pending } = useFormStatus();
+  return (
+    <button type="submit" disabled={pending} className="btn-primary">
+      {pending ? "Creating…" : "Create"}
+    </button>
+  );
+}
+
+export function FlavorCreateForm({ className }: { className?: string }) {
+  const [state, formAction] = useActionState(flavorCreate, null);
 
   return (
-    <form action={handleSubmit} className={className}>
-      {error ? (
-        <p className="mb-2 text-sm text-danger">{error}</p>
+    <form action={formAction} className={className}>
+      {state?.error ? (
+        <p className="mb-2 text-sm text-danger">{state.error}</p>
       ) : null}
       <div className="flex flex-wrap gap-2">
         <input
@@ -36,13 +48,7 @@ export function FlavorCreateForm({ className }: { className?: string }) {
           placeholder="Description (optional)"
           className="input-base"
         />
-        <button
-          type="submit"
-          disabled={pending}
-          className="btn-primary"
-        >
-          {pending ? "Creating…" : "Create"}
-        </button>
+        <SubmitButton />
       </div>
     </form>
   );

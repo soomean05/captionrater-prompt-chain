@@ -4,6 +4,9 @@ import { listFlavors } from "@/lib/db/flavors";
 import { FlavorCreateForm } from "./FlavorCreateForm";
 import { FlavorRow } from "./FlavorRow";
 
+/** Always read fresh rows after create/update (revalidatePath + no static RSC cache). */
+export const dynamic = "force-dynamic";
+
 type FlavorsPageSearchParams = {
   page?: string;
   q?: string;

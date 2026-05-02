@@ -24,8 +24,10 @@ export async function createFlavorAction(formData: FormData) {
 
   const { data, error } = await createFlavor({ name, description, userId });
   if (error) return { error: error.message };
+  revalidatePath("/flavors", "layout");
   revalidatePath("/flavors");
   revalidatePath("/dashboard");
+  revalidatePath("/test");
   redirect(`/flavors/${data?.id}`);
 }
 
@@ -40,8 +42,10 @@ export async function updateFlavorAction(formData: FormData) {
 
   const { error } = await updateFlavor(id, { name, description, userId });
   if (error) return { error: error.message };
+  revalidatePath("/flavors", "layout");
   revalidatePath("/flavors");
   revalidatePath(`/flavors/${id}`);
+  revalidatePath("/test");
   redirect(`/flavors/${id}`);
 }
 
@@ -51,8 +55,10 @@ export async function deleteFlavorAction(formData: FormData) {
 
   const { error } = await deleteFlavor(id);
   if (error) return { error: error.message };
+  revalidatePath("/flavors", "layout");
   revalidatePath("/flavors");
   revalidatePath("/dashboard");
+  revalidatePath("/test");
   redirect("/flavors");
 }
 
@@ -65,7 +71,9 @@ export async function duplicateFlavorAction(formData: FormData) {
   const { data, error } = await duplicateFlavor({ id, userId });
   if (error) return { error: error.message };
 
+  revalidatePath("/flavors", "layout");
   revalidatePath("/flavors");
   revalidatePath("/dashboard");
+  revalidatePath("/test");
   redirect(`/flavors/${data?.id}`);
 }
