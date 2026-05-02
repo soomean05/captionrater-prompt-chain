@@ -224,6 +224,10 @@ export async function deleteStep(id: string) {
   return { error };
 }
 
+function sameStepId(a: unknown, b: unknown): boolean {
+  return String(a ?? "").trim() === String(b ?? "").trim();
+}
+
 export async function reorderStep(
   id: string,
   direction: "up" | "down"
@@ -237,26 +241,35 @@ export async function reorderStep(
   );
   if (listErr || !steps?.length) return { error: listErr ?? { message: "No steps" } };
 
-  const idx = steps.findIndex((s) => s.id === id);
+  /** Stable order + string-safe id match (PostgREST may return numeric ids as numbers). */
+  const ordered = [...steps].sort((a, b) => {
+    const ao = Number(a.order_by ?? 0);
+    const bo = Number(b.order_by ?? 0);
+    if (ao !== bo) return ao - bo;
+    return String(a.id).localeCompare(String(b.id));
+  });
+
+  const idx = ordered.findIndex((s) => sameStepId(s.id, id));
   if (idx < 0) return { error: { message: "Step not found in list" } };
 
   const swapIdx = direction === "up" ? idx - 1 : idx + 1;
-  if (swapIdx < 0 || swapIdx >= steps.length) return { error: null };
+  if (swapIdx < 0 || swapIdx >= ordered.length) return { error: null };
 
-  const otherStep = steps[swapIdx];
-  const currentNum = step.order_by ?? idx;
-  const otherNum = otherStep.order_by ?? swapIdx;
+  const currentRow = ordered[idx]!;
+  const otherRow = ordered[swapIdx]!;
+  const currentNum = currentRow.order_by ?? idx;
+  const otherNum = otherRow.order_by ?? swapIdx;
 
   const { error: u1 } = await supabase
     .from("humor_flavor_steps")
     .update({ order_by: otherNum })
-    .eq("id", id);
+    .eq("id", currentRow.id);
   if (u1) return { error: u1 };
 
   const { error: u2 } = await supabase
     .from("humor_flavor_steps")
     .update({ order_by: currentNum })
-    .eq("id", otherStep.id);
+    .eq("id", otherRow.id);
   if (u2) return { error: u2 };
 
   return { error: null };
