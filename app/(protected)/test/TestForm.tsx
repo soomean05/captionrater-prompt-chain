@@ -151,11 +151,11 @@ export function TestForm({ flavors }: { flavors: HumorFlavor[] }) {
               Generate captions
             </h2>
             <p className="mt-1 text-sm text-muted-foreground">
-              Pick a humor flavor and an image. We run five parallel
-              generate-captions calls (minimal body plus optional{" "}
-              <code className="rounded bg-muted px-1 text-[0.68rem]">count</code>
-              ) and merge distinct lines — no artificial timeout so AlmostCrackd
-              can finish.
+              Pick a humor flavor and an image. By default we call generate-captions
+              once with a single{" "}
+              <code className="rounded bg-muted px-1 text-[0.68rem]">count</code>{" "}
+              (fewer round-trips, less load on AlmostCrackd). Captions are deduped
+              and capped at five lines. Retries apply automatically on 5xx/429.
             </p>
           </div>
         </div>

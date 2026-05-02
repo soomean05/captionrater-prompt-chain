@@ -13,6 +13,11 @@ import {
 /** Test lab targets this many distinct caption lines. */
 export const TEST_FLAVOR_TARGET_CAPTION_COUNT = 5;
 
+/** When `"1"`, run N parallel generate calls (no per-call `count`) for diversity. Default is one call with `count: N` — much easier on AlmostCrackd and avoids their JSON-parse 500s under load. */
+function parallelGenerateCaptionsEnabled(): boolean {
+  return process.env.ALMOSTCRACKD_PARALLEL_GENERATE?.trim() === "1";
+}
+
 /** Merge caption runs; exact match after trim (case-sensitive) so near-dupes from the model stay distinct. */
 function dedupeExactLines(lines: string[]): string[] {
   const seen = new Set<string>();
@@ -127,15 +132,22 @@ export async function runAssignment5TestFlavorCaptions(input: {
 
   const requested = TEST_FLAVOR_TARGET_CAPTION_COUNT;
 
-  const settled = await Promise.allSettled(
-    Array.from({ length: requested }, () =>
-      requestGenerateCaptions(input.accessToken, {
-        imageId,
-        humorFlavorId: flavor.id,
-        desiredCaptionCount: requested,
-      })
-    )
-  );
+  const settled = parallelGenerateCaptionsEnabled()
+    ? await Promise.allSettled(
+        Array.from({ length: requested }, () =>
+          requestGenerateCaptions(input.accessToken, {
+            imageId,
+            humorFlavorId: flavor.id,
+          })
+        )
+      )
+    : await Promise.allSettled([
+        requestGenerateCaptions(input.accessToken, {
+          imageId,
+          humorFlavorId: flavor.id,
+          desiredCaptionCount: requested,
+        }),
+      ]);
 
   const results = settled.map((s) => {
     if (s.status === "fulfilled") return s.value;

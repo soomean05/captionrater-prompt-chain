@@ -432,6 +432,9 @@ export function humorFlavorIdForAlmostCrackd(
 /**
  * Step 4 — body is `{ imageId, humorFlavorId }` plus optional single `count` when
  * `desiredCaptionCount` is set (omit count entirely with ALMOSTCRACKD_OMIT_GENERATE_COUNT=1).
+ *
+ * Retries (same payload): set `ALMOSTCRACKD_GENERATE_MAX_RETRIES` to extra attempts after the
+ * first (default 2 → 3 tries total) for 5xx and 429 only.
  */
 export async function requestGenerateCaptions(
   accessToken: string,
@@ -480,14 +483,48 @@ export async function requestGenerateCaptions(
     console.log("FINAL generate-captions payload:", generatePayload);
   }
 
-  const captionsRes = await fetch(endpoint, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${accessToken}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify(generatePayload),
-  });
+  const bodyJson = JSON.stringify(generatePayload);
+  const parsedRetries = Number.parseInt(
+    process.env.ALMOSTCRACKD_GENERATE_MAX_RETRIES ?? "2",
+    10
+  );
+  const extraRetries = Number.isFinite(parsedRetries)
+    ? Math.min(5, Math.max(0, parsedRetries))
+    : 2;
+  const maxAttempts = 1 + extraRetries;
 
-  return finalizeAlmostCrackdFetch(captionsRes, endpoint);
+  let last: PipelinePostSuccess<unknown> | PipelinePostFailure | null = null;
+
+  for (let attempt = 0; attempt < maxAttempts; attempt++) {
+    if (attempt > 0) {
+      const delayMs = Math.min(12_000, 400 * 2 ** (attempt - 1));
+      await new Promise((r) => setTimeout(r, delayMs));
+      if (process.env.DEBUG_ALMOSTCRACKD === "1") {
+        console.log(
+          "AlmostCrackd generate-captions retry",
+          attempt + 1,
+          "/",
+          maxAttempts
+        );
+      }
+    }
+
+    const captionsRes = await fetch(endpoint, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        "Content-Type": "application/json",
+      },
+      body: bodyJson,
+    });
+
+    const out = await finalizeAlmostCrackdFetch(captionsRes, endpoint);
+    last = out;
+    if (out.ok) return out;
+
+    const retryable = out.status >= 500 || out.status === 429;
+    if (!retryable) return out;
+  }
+
+  return last as PipelinePostFailure;
 }
