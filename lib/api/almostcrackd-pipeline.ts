@@ -11,6 +11,11 @@
  * Flow B — public URL only (Test page):
  *   POST /pipeline/upload-image-from-url { imageUrl, isCommonUse: false }
  *   POST /pipeline/generate-captions — only imageId + humorFlavorId (never null)
+ *
+ * Test harness (`lib/test-flavor-captions.ts`) defaults to sequential calls **without**
+ * optional `count` because AlmostCrackd has returned 500s parsing model prose as JSON when
+ * `count`>1. Opt in: `ALMOSTCRACKD_GENERATE_BULK=1` (single call + count) or
+ * `ALMOSTCRACKD_PARALLEL_GENERATE=1` (parallel minimal calls).
  */
 
 export function getAlmostCrackdApiBase(): string {

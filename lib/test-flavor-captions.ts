@@ -8,14 +8,20 @@ import {
   uploadImageFromUrl,
   pickPresignedUrls,
   type PipelinePostFailure,
+  type PipelinePostSuccess,
 } from "@/lib/api/almostcrackd-pipeline";
 
 /** Test lab targets this many distinct caption lines. */
 export const TEST_FLAVOR_TARGET_CAPTION_COUNT = 5;
 
-/** When `"1"`, run N parallel generate calls (no per-call `count`) for diversity. Default is one call with `count: N` — much easier on AlmostCrackd and avoids their JSON-parse 500s under load. */
+/** N parallel calls, minimal body each (no `count`). */
 function parallelGenerateCaptionsEnabled(): boolean {
   return process.env.ALMOSTCRACKD_PARALLEL_GENERATE?.trim() === "1";
+}
+
+/** One call with `count: N` in the body (fastest when AlmostCrackd handles it). */
+function bulkCountGenerateEnabled(): boolean {
+  return process.env.ALMOSTCRACKD_GENERATE_BULK?.trim() === "1";
 }
 
 /** Merge caption runs; exact match after trim (case-sensitive) so near-dupes from the model stay distinct. */
@@ -132,34 +138,54 @@ export async function runAssignment5TestFlavorCaptions(input: {
 
   const requested = TEST_FLAVOR_TARGET_CAPTION_COUNT;
 
-  const settled = parallelGenerateCaptionsEnabled()
-    ? await Promise.allSettled(
-        Array.from({ length: requested }, () =>
-          requestGenerateCaptions(input.accessToken, {
-            imageId,
-            humorFlavorId: flavor.id,
-          })
-        )
-      )
-    : await Promise.allSettled([
+  /** Default: N sequential minimal calls (no `count`). AlmostCrackd often 500s with
+   * `Unexpected token 'W'… is not valid JSON` when `count`>1 batches non-JSON model text. */
+  let results: Array<PipelinePostSuccess<unknown> | PipelinePostFailure>;
+
+  if (parallelGenerateCaptionsEnabled()) {
+    const settled = await Promise.allSettled(
+      Array.from({ length: requested }, () =>
         requestGenerateCaptions(input.accessToken, {
           imageId,
           humorFlavorId: flavor.id,
-          desiredCaptionCount: requested,
-        }),
-      ]);
-
-  const results = settled.map((s) => {
-    if (s.status === "fulfilled") return s.value;
-    const msg =
-      s.reason instanceof Error ? s.reason.message : "Request failed";
-    return {
-      ok: false as const,
-      status: 502,
-      endpoint: "",
-      message: msg,
-    };
-  });
+        })
+      )
+    );
+    results = settled.map((s) => {
+      if (s.status === "fulfilled") return s.value;
+      const msg =
+        s.reason instanceof Error ? s.reason.message : "Request failed";
+      return {
+        ok: false as const,
+        status: 502,
+        endpoint: "",
+        message: msg,
+      };
+    });
+  } else if (bulkCountGenerateEnabled()) {
+    const r = await requestGenerateCaptions(input.accessToken, {
+      imageId,
+      humorFlavorId: flavor.id,
+      desiredCaptionCount: requested,
+    });
+    results = [r];
+  } else {
+    results = [];
+    for (let i = 0; i < requested; i++) {
+      const r = await requestGenerateCaptions(input.accessToken, {
+        imageId,
+        humorFlavorId: flavor.id,
+      });
+      results.push(r);
+      if (!r.ok) {
+        const mergedSoFar = dedupeExactLines(
+          results.flatMap((x) => (x.ok ? extractCaptions(x.data) : []))
+        );
+        if (mergedSoFar.length > 0) break;
+        return { ok: false, error: failureMessage(r), status: 502 };
+      }
+    }
+  }
 
   const merged = dedupeExactLines(
     results.flatMap((r) => (r.ok ? extractCaptions(r.data) : []))
@@ -175,7 +201,7 @@ export async function runAssignment5TestFlavorCaptions(input: {
       };
     }
     throw new Error(
-      `AlmostCrackd returned 0 captions from parallel batch. Raw first response: ${JSON.stringify(results[0]?.ok ? results[0].data : results[0])}`
+      `AlmostCrackd returned 0 captions. Raw first response: ${JSON.stringify(results[0]?.ok ? results[0].data : results[0])}`
     );
   }
 
