@@ -17,11 +17,15 @@
  * `count`>1. Opt in: `ALMOSTCRACKD_GENERATE_BULK=1` (single call + count) or
  * `ALMOSTCRACKD_PARALLEL_GENERATE=1` (parallel minimal calls).
  *
- * After `upload-image-from-url`, the test flow waits `ALMOSTCRACKD_POST_UPLOAD_DELAY_MS` (default
- * 1200) before generate-captions so `images.almostcrackd.ai` can serve the new object.
+ * After `upload-image-from-url`, optional `ALMOSTCRACKD_POST_UPLOAD_DELAY_MS` (default 400).
+ * For flaky CDN, raise it (e.g. 1200). For speed, `0` skips the wait.
  *
- * Sequential test runs also use `ALMOSTCRACKD_SEQUENTIAL_GAP_MS` (default 450) and per-slot
- * `ALMOSTCRACKD_SLOT_EXTRA_RETRIES` (default 2) for AlmostCrackd's flaky JSON-parse 500s.
+ * Sequential test flow: `ALMOSTCRACKD_SEQUENTIAL_GAP_MS` (default 0) and
+ * `ALMOSTCRACKD_SLOT_EXTRA_RETRIES` (default 0). Increase those or `ALMOSTCRACKD_GENERATE_MAX_RETRIES`
+ * if AlmostCrackd JSON-parse 500s return.
+ *
+ * The test harness sends explicit `"count": 1` on minimal runs (disable with
+ * `ALMOSTCRACKD_SEND_COUNT_ONE=0`) because their API has behaved differently vs omitting `count`.
  */
 
 export function getAlmostCrackdApiBase(): string {
@@ -444,10 +448,9 @@ export function humorFlavorIdForAlmostCrackd(
  * Step 4 — body is `{ imageId, humorFlavorId }` plus optional single `count` when
  * `desiredCaptionCount` is set (omit count entirely with ALMOSTCRACKD_OMIT_GENERATE_COUNT=1).
  *
- * Retries (same payload): `ALMOSTCRACKD_GENERATE_MAX_RETRIES` = extra attempts after the first
- * (default 6 → 7 tries, cap 15). Retries on 5xx, 429, and 400 for transient image CDN errors.
- * Backoff is longer when the last failure looked like AlmostCrackd's broken JSON.parse on model
- * text ("Unexpected token … is not valid JSON").
+ * Retries (same payload): `ALMOSTCRACKD_GENERATE_MAX_RETRIES` extra attempts after the first
+ * (default 2 → 3 tries, cap 15). Retries on 5xx, 429, and 400 for transient image CDN errors.
+ * Slightly longer backoff when the message looks like invalid JSON from AlmostCrackd's server.
  */
 export function almostcrackdMessageLooksLikeInvalidJsonError(
   message: string
@@ -481,6 +484,11 @@ export async function requestGenerateCaptions(
     humorFlavorId: string | number;
     /** Adds only `count` to the JSON body (not `captionCount`). */
     desiredCaptionCount?: number;
+    /**
+     * Send `"count": 1` explicitly. The test harness uses this because AlmostCrackd has returned
+     * 500 JSON-parse errors when `count` was omitted (different server path than `count: 1`).
+     */
+    sendCountOne?: boolean;
   }
 ): Promise<PipelinePostSuccess<unknown> | PipelinePostFailure> {
   const baseUrl = getAlmostCrackdApiBase();
@@ -493,16 +501,22 @@ export async function requestGenerateCaptions(
     humorFlavorId: humorFlavorIdForAlmostCrackd(params.humorFlavorId),
   };
 
-  if (
-    process.env.ALMOSTCRACKD_OMIT_GENERATE_COUNT !== "1" &&
-    typeof params.desiredCaptionCount === "number" &&
-    Number.isFinite(params.desiredCaptionCount) &&
-    params.desiredCaptionCount > 1
-  ) {
-    generatePayload.count = Math.min(
-      30,
-      Math.floor(params.desiredCaptionCount)
-    );
+  if (process.env.ALMOSTCRACKD_OMIT_GENERATE_COUNT !== "1") {
+    if (
+      params.sendCountOne &&
+      process.env.ALMOSTCRACKD_SEND_COUNT_ONE !== "0"
+    ) {
+      generatePayload.count = 1;
+    } else if (
+      typeof params.desiredCaptionCount === "number" &&
+      Number.isFinite(params.desiredCaptionCount) &&
+      params.desiredCaptionCount > 1
+    ) {
+      generatePayload.count = Math.min(
+        30,
+        Math.floor(params.desiredCaptionCount)
+      );
+    }
   }
 
   if (!generatePayload.imageId) {
@@ -523,12 +537,12 @@ export async function requestGenerateCaptions(
 
   const bodyJson = JSON.stringify(generatePayload);
   const parsedRetries = Number.parseInt(
-    process.env.ALMOSTCRACKD_GENERATE_MAX_RETRIES ?? "6",
+    process.env.ALMOSTCRACKD_GENERATE_MAX_RETRIES ?? "2",
     10
   );
   const extraRetries = Number.isFinite(parsedRetries)
     ? Math.min(15, Math.max(0, parsedRetries))
-    : 6;
+    : 2;
   const maxAttempts = 1 + extraRetries;
 
   let last: PipelinePostSuccess<unknown> | PipelinePostFailure | null = null;
@@ -537,8 +551,8 @@ export async function requestGenerateCaptions(
   for (let attempt = 0; attempt < maxAttempts; attempt++) {
     if (attempt > 0) {
       const jsonBug = almostcrackdMessageLooksLikeInvalidJsonError(lastFailMessage);
-      const capMs = jsonBug ? 28_000 : 14_000;
-      const baseMs = jsonBug ? 900 : 500;
+      const capMs = jsonBug ? 8_000 : 5_000;
+      const baseMs = jsonBug ? 280 : 200;
       const delayMs = Math.min(capMs, baseMs * 2 ** (attempt - 1));
       await new Promise((r) => setTimeout(r, delayMs));
       if (process.env.DEBUG_ALMOSTCRACKD === "1") {

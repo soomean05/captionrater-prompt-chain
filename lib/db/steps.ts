@@ -5,7 +5,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
  * `llm_system_prompt` (e.g. "System prompt missing for humor flavor step …").
  */
 export const DEFAULT_LLM_SYSTEM_PROMPT =
-  "You are a careful assistant generating image captions. Follow the user prompt instructions.";
+  "You are a careful assistant generating image captions. Follow the user prompt instructions. If the pipeline requires structured output, respond with valid JSON only (for example a JSON array of strings), with no prose before or after.";
 
 const STEP_SELECT = `
   id,

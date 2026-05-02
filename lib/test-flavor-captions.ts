@@ -42,18 +42,23 @@ function failureMessage(f: PipelinePostFailure): string {
   return f.message;
 }
 
+function augmentAlmostCrackdJsonParseError(message: string): string {
+  if (!almostcrackdMessageLooksLikeInvalidJsonError(message)) return message;
+  return `${message} This is AlmostCrackd's server parsing model text as JSON (not something your app can fix). Try another image, tweak humor flavor step prompts, or contact AlmostCrackd.`;
+}
+
 /** AlmostCrackd sometimes 400s on generate-captions if their CDN is not ready yet. */
 async function waitAfterImageRegister(): Promise<void> {
-  const raw = process.env.ALMOSTCRACKD_POST_UPLOAD_DELAY_MS ?? "1200";
+  const raw = process.env.ALMOSTCRACKD_POST_UPLOAD_DELAY_MS ?? "400";
   const ms = Number.parseInt(raw, 10);
   if (!Number.isFinite(ms) || ms <= 0) return;
   const clamped = Math.min(20_000, ms);
   await new Promise((r) => setTimeout(r, clamped));
 }
 
-/** Space sequential generate calls so AlmostCrackd is less hammered (default 450ms). */
+/** Optional pause between sequential generate calls (default 0ms). */
 async function gapBetweenSequentialGenerates(): Promise<void> {
-  const raw = process.env.ALMOSTCRACKD_SEQUENTIAL_GAP_MS ?? "450";
+  const raw = process.env.ALMOSTCRACKD_SEQUENTIAL_GAP_MS ?? "0";
   const ms = Number.parseInt(raw, 10);
   if (!Number.isFinite(ms) || ms <= 0) return;
   await new Promise((r) => setTimeout(r, Math.min(10_000, ms)));
@@ -168,6 +173,7 @@ export async function runAssignment5TestFlavorCaptions(input: {
         requestGenerateCaptions(input.accessToken, {
           imageId,
           humorFlavorId: flavor.id,
+          sendCountOne: true,
         })
       )
     );
@@ -192,12 +198,12 @@ export async function runAssignment5TestFlavorCaptions(input: {
   } else {
     results = [];
     const slotExtraParsed = Number.parseInt(
-      process.env.ALMOSTCRACKD_SLOT_EXTRA_RETRIES ?? "2",
+      process.env.ALMOSTCRACKD_SLOT_EXTRA_RETRIES ?? "0",
       10
     );
     const slotExtraMax = Number.isFinite(slotExtraParsed)
       ? Math.min(6, Math.max(0, slotExtraParsed))
-      : 2;
+      : 0;
 
     for (let i = 0; i < requested; i++) {
       if (i > 0) await gapBetweenSequentialGenerates();
@@ -205,6 +211,7 @@ export async function runAssignment5TestFlavorCaptions(input: {
       let r = await requestGenerateCaptions(input.accessToken, {
         imageId,
         humorFlavorId: flavor.id,
+        sendCountOne: true,
       });
       let extra = 0;
       while (
@@ -213,10 +220,11 @@ export async function runAssignment5TestFlavorCaptions(input: {
         almostcrackdMessageLooksLikeInvalidJsonError(failureMessage(r))
       ) {
         extra++;
-        await new Promise((res) => setTimeout(res, Math.min(8_000, 650 * extra)));
+        await new Promise((res) => setTimeout(res, Math.min(3_000, 300 * extra)));
         r = await requestGenerateCaptions(input.accessToken, {
           imageId,
           humorFlavorId: flavor.id,
+          sendCountOne: true,
         });
       }
 
@@ -226,7 +234,11 @@ export async function runAssignment5TestFlavorCaptions(input: {
           results.flatMap((x) => (x.ok ? extractCaptions(x.data) : []))
         );
         if (mergedSoFar.length > 0) break;
-        return { ok: false, error: failureMessage(r), status: 502 };
+        return {
+          ok: false,
+          error: augmentAlmostCrackdJsonParseError(failureMessage(r)),
+          status: 502,
+        };
       }
     }
   }
@@ -240,7 +252,7 @@ export async function runAssignment5TestFlavorCaptions(input: {
     if (firstFail && !firstFail.ok) {
       return {
         ok: false,
-        error: failureMessage(firstFail),
+        error: augmentAlmostCrackdJsonParseError(failureMessage(firstFail)),
         status: 502,
       };
     }
