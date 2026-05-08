@@ -184,6 +184,31 @@ export async function listFlavors(input?: {
   };
 }
 
+/**
+ * All flavors (every page) for dropdowns like `/test`. `listFlavors()` alone only returns the
+ * first page (default 10 rows), so TAs could not see flavors beyond that.
+ */
+export async function listAllFlavors(options?: { query?: string }) {
+  const merged: HumorFlavor[] = [];
+  const pageSize = 500;
+  let page = 1;
+  for (;;) {
+    const { data, error, count } = await listFlavors({
+      page,
+      pageSize,
+      query: options?.query,
+    });
+    if (error) return { data: null, error };
+    const batch = data ?? [];
+    merged.push(...batch);
+    if (batch.length < pageSize) break;
+    if (merged.length >= count) break;
+    page += 1;
+    if (page > 500) break;
+  }
+  return { data: merged, error: null };
+}
+
 export async function getFlavor(id: string) {
   const supabase = createAdminClient();
   const flavorNameColumn = await getFlavorNameColumn();

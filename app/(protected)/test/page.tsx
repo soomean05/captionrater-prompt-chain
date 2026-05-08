@@ -1,11 +1,11 @@
 import { PageHeader } from "@/components/PageHeader";
-import { listFlavors } from "@/lib/db/flavors";
+import { listAllFlavors } from "@/lib/db/flavors";
 import { TestForm } from "./TestForm";
 
 export const dynamic = "force-dynamic";
 
 export default async function TestPage() {
-  const { data: flavors, error } = await listFlavors();
+  const { data: flavors, error } = await listAllFlavors();
 
   return (
     <div className="space-y-10">
