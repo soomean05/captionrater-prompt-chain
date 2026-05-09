@@ -110,9 +110,12 @@ export async function reconcileAlmostCrackdJsonPromptsForFlavor(
   if (listErr) return { error: listErr };
   if (!steps?.length) return { error: null };
 
-  const sorted = [...steps].sort(
-    (a, b) => (a.order_by ?? 0) - (b.order_by ?? 0)
-  );
+  const sorted = [...steps].sort((a, b) => {
+    const ao = Number(a.order_by ?? 0);
+    const bo = Number(b.order_by ?? 0);
+    if (ao !== bo) return ao - bo;
+    return String(a.id).localeCompare(String(b.id));
+  });
   const n = sorted.length;
 
   for (let i = 0; i < n; i++) {
@@ -150,9 +153,12 @@ export async function reconcileAlmostCrackdJsonPromptsForFlavor(
 /** True if the last step (by order) is not already on the AlmostCrackd JSON caption template. */
 export function needsAlmostCrackdJsonReconcile(steps: HumorFlavorStep[]): boolean {
   if (!steps.length) return false;
-  const sorted = [...steps].sort(
-    (a, b) => (a.order_by ?? 0) - (b.order_by ?? 0)
-  );
+  const sorted = [...steps].sort((a, b) => {
+    const ao = Number(a.order_by ?? 0);
+    const bo = Number(b.order_by ?? 0);
+    if (ao !== bo) return ao - bo;
+    return String(a.id).localeCompare(String(b.id));
+  });
   const last = sorted[sorted.length - 1]!;
   const u = (last.llm_user_prompt ?? "").trim();
   const s = (last.llm_system_prompt ?? "").trim();

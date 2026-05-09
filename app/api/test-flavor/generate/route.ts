@@ -123,53 +123,58 @@ export async function POST(request: Request) {
       }
     }
 
-    let result;
+    const imageFilePayload =
+      contentTypeHdr.includes("multipart/form-data") && multipartFile
+        ? {
+            buffer: Buffer.from(await multipartFile.arrayBuffer()),
+            contentType: multipartFile.type?.trim()
+              ? multipartFile.type
+              : "application/octet-stream",
+          }
+        : null;
 
-    if (contentTypeHdr.includes("multipart/form-data") && multipartFile) {
-      const buffer = Buffer.from(await multipartFile.arrayBuffer());
-      result = await runAssignment5TestFlavorCaptions({
-        accessToken,
-        humorFlavorId,
-        imageFile: {
-          buffer,
-          contentType: multipartFile.type?.trim()
-            ? multipartFile.type
-            : "application/octet-stream",
-        },
-      });
-    } else {
-      result = await runAssignment5TestFlavorCaptions({
+    async function runGenerateAttempt() {
+      if (imageFilePayload) {
+        return runAssignment5TestFlavorCaptions({
+          accessToken,
+          humorFlavorId,
+          imageFile: imageFilePayload,
+        });
+      }
+      return runAssignment5TestFlavorCaptions({
         accessToken,
         humorFlavorId,
         imageUrl,
       });
     }
 
+    let result = await runGenerateAttempt();
+
     if (!result.ok) {
       // If AlmostCrackd rejects non-JSON output, force-reconcile final step prompts and retry once.
       if (almostcrackdMessageLooksLikeInvalidJsonError(result.error)) {
         const { error: recErr } =
           await reconcileAlmostCrackdJsonPromptsForFlavor(humorFlavorId, userId);
-        if (!recErr) {
-          if (contentTypeHdr.includes("multipart/form-data") && multipartFile) {
-            const buffer = Buffer.from(await multipartFile.arrayBuffer());
-            result = await runAssignment5TestFlavorCaptions({
-              accessToken,
-              humorFlavorId,
-              imageFile: {
-                buffer,
-                contentType: multipartFile.type?.trim()
-                  ? multipartFile.type
-                  : "application/octet-stream",
-              },
-            });
-          } else {
-            result = await runAssignment5TestFlavorCaptions({
-              accessToken,
-              humorFlavorId,
-              imageUrl,
-            });
-          }
+        if (recErr) {
+          return Response.json(
+            {
+              error:
+                recErr.message ??
+                "Could not align step prompts for AlmostCrackd after JSON parse failure.",
+            },
+            { status: 500 }
+          );
+        }
+
+        // Give prompt update a moment to propagate, then retry up to 2 times.
+        await new Promise((r) => setTimeout(r, 250));
+        result = await runGenerateAttempt();
+        if (
+          !result.ok &&
+          almostcrackdMessageLooksLikeInvalidJsonError(result.error)
+        ) {
+          await new Promise((r) => setTimeout(r, 500));
+          result = await runGenerateAttempt();
         }
       }
     }
