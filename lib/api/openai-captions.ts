@@ -2,7 +2,7 @@ const OPENAI_RESPONSES_ENDPOINT = "https://api.openai.com/v1/responses";
 const DEFAULT_OPENAI_MODEL = "gpt-4o-mini";
 
 const STRICT_CAPTION_PROMPT =
-  "Return ONLY a raw JSON array of exactly five caption strings. No analysis. No explanation. No markdown. No labels. No object wrapper. No text before or after the JSON array. The first character must be [ and the last character must be ]. Think about the image internally, but do not output analysis.";
+  "Return ONLY a raw JSON array of exactly five caption strings. No analysis. No explanation. No markdown. No labels. No object wrapper. No text before or after the JSON array. The first character must be [ and the last character must be ]. Think about the image internally, but do not output analysis. Do not mention the flavor name literally in the caption text.";
 
 function extractJsonArrayText(raw: string): string | null {
   const first = raw.indexOf("[");
@@ -29,7 +29,6 @@ export function generateSimpleFallbackCaptions(input: {
   flavorName?: string | null;
   flavorSteps: Array<{ llm_user_prompt: string | null; llm_system_prompt: string | null }>;
 }): string[] {
-  const flavor = (input.flavorName ?? "this style").trim() || "this style";
   const hints = input.flavorSteps
     .map((s) => `${s.llm_system_prompt ?? ""} ${s.llm_user_prompt ?? ""}`.trim())
     .filter(Boolean)
@@ -39,11 +38,11 @@ export function generateSimpleFallbackCaptions(input: {
     .trim();
   const hintSnippet = hints ? ` ${hints.slice(0, 80)}...` : "";
   return exactlyFive([
-    `POV: ${flavor} mode activated and the photo did not see that coming.${hintSnippet}`,
-    `This image is proof that ${flavor.toLowerCase()} humor works better than coffee.`,
-    `When the picture says one thing but ${flavor.toLowerCase()} says the louder part out loud.`,
-    `I brought ${flavor.toLowerCase()} energy to this photo and now everyone is nervous.`,
-    `No notes, just ${flavor.toLowerCase()} vibes and questionable confidence.`,
+    `POV: the chaos mode activated and the photo did not see that coming.${hintSnippet}`,
+    "This image is proof that dry wit works better than coffee.",
+    "When the picture says one thing but the caption says the louder part out loud.",
+    "I brought unearned confidence to this photo and now everyone is nervous.",
+    "No notes, just chaotic vibes and questionable confidence.",
   ]);
 }
 
