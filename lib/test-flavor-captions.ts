@@ -39,7 +39,7 @@ function failureMessage(f: PipelinePostFailure): string {
 
 function augmentAlmostCrackdJsonParseError(message: string): string {
   if (!almostcrackdMessageLooksLikeInvalidJsonError(message)) return message;
-  return `${message} The last humor flavor step must instruct the model to return only valid JSON (array of five caption strings). Re-save steps or run a test after updating prompts in Flavors.`;
+  return "AlmostCrackd returned non-JSON text for caption generation multiple times. This can be transient; please retry once.";
 }
 
 /** AlmostCrackd sometimes 400s on generate-captions if their CDN is not ready yet. */
@@ -217,11 +217,9 @@ export async function runAssignment5TestFlavorCaptions(input: {
           results.flatMap((x) => (x.ok ? extractCaptions(x.data) : []))
         );
         if (mergedSoFar.length > 0) break;
-        return {
-          ok: false,
-          error: augmentAlmostCrackdJsonParseError(failureMessage(r)),
-          status: 502,
-        };
+        // Keep probing additional slots: AlmostCrackd can fail one call and
+        // still return valid JSON on subsequent calls for the same payload.
+        continue;
       }
     }
   }
