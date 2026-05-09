@@ -25,7 +25,9 @@ function captionBackendOk(): boolean {
 function invalidJson500FromAlmostCrackd(message: string): boolean {
   const m = message.toLowerCase();
   return (
-    m.includes("almostcrackd error 500") &&
+    (m.includes("almostcrackd error 500") ||
+      m.includes("statuscode\": 500") ||
+      m.includes("statuscode: 500")) &&
     (m.includes("is not valid json") || m.includes("unexpected token"))
   );
 }
@@ -209,11 +211,17 @@ export async function POST(request: Request) {
 
     let result = await runGenerateAttempt();
 
+    const shouldUseJsonFallback =
+      !result.ok &&
+      (invalidJson500FromAlmostCrackd(result.error) ||
+        (typeof result.rawAlmostCrackdResponse === "string" &&
+          invalidJson500FromAlmostCrackd(result.rawAlmostCrackdResponse)));
+
     if (!result.ok) {
       // Skip additional AlmostCrackd retries when their parser itself fails on invalid JSON.
       if (
         almostcrackdMessageLooksLikeInvalidJsonError(result.error) &&
-        !invalidJson500FromAlmostCrackd(result.error)
+        !shouldUseJsonFallback
       ) {
         for (let retryLevel = 1; retryLevel <= 3; retryLevel++) {
           const strict = await applyAlmostCrackdFinalPromptStrictnessForRetry(
@@ -254,7 +262,7 @@ export async function POST(request: Request) {
     }
 
     if (!result.ok) {
-      if (invalidJson500FromAlmostCrackd(result.error)) {
+      if (shouldUseJsonFallback) {
         const fallback = await generateCaptionsViaOpenAI({
           imageUrl,
           imageFile: imageFilePayload ?? undefined,
