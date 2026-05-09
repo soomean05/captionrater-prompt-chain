@@ -15,9 +15,43 @@ function toDataUrl(buffer: Buffer, contentType: string): string {
   return `data:${contentType};base64,${buffer.toString("base64")}`;
 }
 
+function exactlyFive(captions: string[]): string[] {
+  const cleaned = captions.map((c) => c.trim()).filter(Boolean);
+  if (cleaned.length >= 5) return cleaned.slice(0, 5);
+  const out = [...cleaned];
+  while (out.length < 5) {
+    out.push(`Caption variation ${out.length + 1}`);
+  }
+  return out;
+}
+
+export function generateSimpleFallbackCaptions(input: {
+  flavorName?: string | null;
+  flavorSteps: Array<{ llm_user_prompt: string | null; llm_system_prompt: string | null }>;
+}): string[] {
+  const flavor = (input.flavorName ?? "this style").trim() || "this style";
+  const hints = input.flavorSteps
+    .map((s) => `${s.llm_system_prompt ?? ""} ${s.llm_user_prompt ?? ""}`.trim())
+    .filter(Boolean)
+    .slice(-2)
+    .join(" ")
+    .replace(/\s+/g, " ")
+    .trim();
+  const hintSnippet = hints ? ` ${hints.slice(0, 80)}...` : "";
+  return exactlyFive([
+    `POV: ${flavor} mode activated and the photo did not see that coming.${hintSnippet}`,
+    `This image is proof that ${flavor.toLowerCase()} humor works better than coffee.`,
+    `When the picture says one thing but ${flavor.toLowerCase()} says the louder part out loud.`,
+    `I brought ${flavor.toLowerCase()} energy to this photo and now everyone is nervous.`,
+    `No notes, just ${flavor.toLowerCase()} vibes and questionable confidence.`,
+  ]);
+}
+
 export async function generateCaptionsViaOpenAI(input: {
   imageUrl?: string;
   imageFile?: { buffer: Buffer; contentType: string };
+  flavorName?: string | null;
+  flavorSteps?: Array<{ llm_user_prompt: string | null; llm_system_prompt: string | null }>;
 }): Promise<
   | { ok: true; captions: string[] }
   | { ok: false; error: string; rawOpenAiResponse?: string }
@@ -36,13 +70,26 @@ export async function generateCaptionsViaOpenAI(input: {
     return { ok: false, error: "OpenAI fallback requires an image URL or file." };
   }
 
+  const stepsText = (input.flavorSteps ?? [])
+    .map(
+      (s, i) =>
+        `Step ${i + 1}\nSystem: ${(s.llm_system_prompt ?? "").trim()}\nUser: ${(s.llm_user_prompt ?? "").trim()}`
+    )
+    .join("\n\n");
+  const flavorLine = input.flavorName?.trim()
+    ? `Flavor name: ${input.flavorName.trim()}`
+    : "Flavor name: (unknown)";
+
   const body = {
     model,
     input: [
       {
         role: "user",
         content: [
-          { type: "input_text", text: STRICT_CAPTION_PROMPT },
+          {
+            type: "input_text",
+            text: `${STRICT_CAPTION_PROMPT}\n\nUse this flavor context while writing captions:\n${flavorLine}\n${stepsText}`,
+          },
           { type: "input_image", image_url: imageInput },
         ],
       },
@@ -96,7 +143,7 @@ export async function generateCaptionsViaOpenAI(input: {
     if (!Array.isArray(arr)) {
       return { ok: false, error: "OpenAI fallback output is not a JSON array.", rawOpenAiResponse: raw };
     }
-    const captions = arr.map((v) => String(v ?? "").trim()).filter(Boolean).slice(0, 5);
+    const captions = exactlyFive(arr.map((v) => String(v ?? "").trim()));
     if (captions.length === 0) {
       return { ok: false, error: "OpenAI fallback returned empty captions.", rawOpenAiResponse: raw };
     }

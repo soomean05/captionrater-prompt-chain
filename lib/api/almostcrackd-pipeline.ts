@@ -464,6 +464,9 @@ export function almostcrackdMessageLooksLikeInvalidJsonError(
 function isRetryableGenerateCaptionsFailure(
   out: PipelinePostFailure
 ): boolean {
+  if (out.status === 500 && almostcrackdMessageLooksLikeInvalidJsonError(out.message)) {
+    return false;
+  }
   if (out.status >= 500 || out.status === 429) return true;
   if (out.status !== 400) return false;
   const m = out.message.toLowerCase();

@@ -12,11 +12,22 @@ import { almostcrackdMessageLooksLikeInvalidJsonError } from "@/lib/api/almostcr
 import { getCurrentUserId } from "@/lib/supabase/current-user";
 import { runAssignment5TestFlavorCaptions } from "@/lib/test-flavor-captions";
 import { getFlavor } from "@/lib/db/flavors";
-import { generateCaptionsViaOpenAI } from "@/lib/api/openai-captions";
+import {
+  generateCaptionsViaOpenAI,
+  generateSimpleFallbackCaptions,
+} from "@/lib/api/openai-captions";
 
 function captionBackendOk(): boolean {
   const v = process.env.CAPTION_BACKEND?.trim().toLowerCase();
   return !v || v === "almostcrackd";
+}
+
+function invalidJson500FromAlmostCrackd(message: string): boolean {
+  const m = message.toLowerCase();
+  return (
+    m.includes("almostcrackd error 500") &&
+    (m.includes("is not valid json") || m.includes("unexpected token"))
+  );
 }
 
 /**
@@ -199,8 +210,11 @@ export async function POST(request: Request) {
     let result = await runGenerateAttempt();
 
     if (!result.ok) {
-      // If AlmostCrackd rejects non-JSON output, force-reconcile final step prompts and retry once.
-      if (almostcrackdMessageLooksLikeInvalidJsonError(result.error)) {
+      // Skip additional AlmostCrackd retries when their parser itself fails on invalid JSON.
+      if (
+        almostcrackdMessageLooksLikeInvalidJsonError(result.error) &&
+        !invalidJson500FromAlmostCrackd(result.error)
+      ) {
         for (let retryLevel = 1; retryLevel <= 3; retryLevel++) {
           const strict = await applyAlmostCrackdFinalPromptStrictnessForRetry(
             humorFlavorId,
@@ -240,16 +254,61 @@ export async function POST(request: Request) {
     }
 
     if (!result.ok) {
-      if (
-        process.env.CAPTION_FALLBACK_OPENAI === "1" &&
-        almostcrackdMessageLooksLikeInvalidJsonError(result.error)
-      ) {
+      if (invalidJson500FromAlmostCrackd(result.error)) {
         const fallback = await generateCaptionsViaOpenAI({
           imageUrl,
           imageFile: imageFilePayload ?? undefined,
+          flavorName: flavorInfo?.name ?? null,
+          flavorSteps: sortedForDebug.map((s) => ({
+            llm_user_prompt: s.llm_user_prompt,
+            llm_system_prompt: s.llm_system_prompt,
+          })),
         });
         if (fallback.ok) {
-          return Response.json({ ok: true, captions: fallback.captions, fallback: "openai" });
+          return Response.json({
+            ok: true,
+            captions: fallback.captions,
+            fallbackNotice:
+              "AlmostCrackd had trouble formatting captions, so fallback captions were generated.",
+            fallback: "openai",
+          });
+        }
+        const localFallback = generateSimpleFallbackCaptions({
+          flavorName: flavorInfo?.name ?? null,
+          flavorSteps: sortedForDebug.map((s) => ({
+            llm_user_prompt: s.llm_user_prompt,
+            llm_system_prompt: s.llm_system_prompt,
+          })),
+        });
+        return Response.json({
+          ok: true,
+          captions: localFallback,
+          fallbackNotice:
+            "AlmostCrackd had trouble formatting captions, so fallback captions were generated.",
+          fallback: "local",
+          rawAlmostCrackdResponse: result.rawAlmostCrackdResponse ?? null,
+          rawOpenAiResponse: fallback.rawOpenAiResponse ?? null,
+        });
+      }
+
+      if (process.env.CAPTION_FALLBACK_OPENAI === "1") {
+        const fallback = await generateCaptionsViaOpenAI({
+          imageUrl,
+          imageFile: imageFilePayload ?? undefined,
+          flavorName: flavorInfo?.name ?? null,
+          flavorSteps: sortedForDebug.map((s) => ({
+            llm_user_prompt: s.llm_user_prompt,
+            llm_system_prompt: s.llm_system_prompt,
+          })),
+        });
+        if (fallback.ok) {
+          return Response.json({
+            ok: true,
+            captions: fallback.captions,
+            fallbackNotice:
+              "AlmostCrackd had trouble formatting captions, so fallback captions were generated.",
+            fallback: "openai",
+          });
         }
         return Response.json(
           {

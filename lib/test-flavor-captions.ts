@@ -63,6 +63,14 @@ function augmentAlmostCrackdJsonParseError(message: string): string {
   return "AlmostCrackd returned non-JSON text for caption generation multiple times. This can be transient; please retry once.";
 }
 
+function isInvalidJson500(message: string): boolean {
+  const m = message.toLowerCase();
+  return (
+    m.includes("almostcrackd error 500") &&
+    (m.includes("is not valid json") || m.includes("unexpected token"))
+  );
+}
+
 /** AlmostCrackd sometimes 400s on generate-captions if their CDN is not ready yet. */
 async function waitAfterImageRegister(): Promise<void> {
   const raw = process.env.ALMOSTCRACKD_POST_UPLOAD_DELAY_MS ?? "400";
@@ -243,7 +251,8 @@ export async function runAssignment5TestFlavorCaptions(input: {
       while (
         !r.ok &&
         extra < slotExtraMax &&
-        almostcrackdMessageLooksLikeInvalidJsonError(failureMessage(r))
+        almostcrackdMessageLooksLikeInvalidJsonError(failureMessage(r)) &&
+        !isInvalidJson500(failureMessage(r))
       ) {
         extra++;
         await new Promise((res) => setTimeout(res, Math.min(3_000, 300 * extra)));
@@ -255,6 +264,14 @@ export async function runAssignment5TestFlavorCaptions(input: {
 
       results.push(r);
       if (!r.ok) {
+        if (isInvalidJson500(failureMessage(r))) {
+          return {
+            ok: false,
+            error: augmentAlmostCrackdJsonParseError(failureMessage(r)),
+            status: 502,
+            rawAlmostCrackdResponse: r.rawBody,
+          };
+        }
         const mergedSoFar = dedupeExactLines(
           results.flatMap((x) => (x.ok ? extractCaptions(x.data) : []))
         );

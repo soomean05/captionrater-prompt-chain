@@ -29,7 +29,7 @@ function IconCopy(props: React.SVGProps<SVGSVGElement>) {
 }
 
 type GenResult =
-  | { ok: true; captions: string[] }
+  | { ok: true; captions: string[]; fallbackNotice?: string }
   | {
       ok: false;
       error: string;
@@ -164,6 +164,7 @@ export function TestForm({ flavors }: { flavors: HumorFlavor[] }) {
       let data: {
         ok?: boolean;
         captions?: unknown[];
+        fallbackNotice?: unknown;
         error?: string;
         rawAlmostCrackdResponse?: unknown;
         rawOpenAiResponse?: unknown;
@@ -203,6 +204,8 @@ export function TestForm({ flavors }: { flavors: HumorFlavor[] }) {
       setResult({
         ok: true,
         captions: captionsFromRecords(capsRaw),
+        fallbackNotice:
+          typeof data.fallbackNotice === "string" ? data.fallbackNotice : undefined,
       });
     } catch (err) {
       setResult({
@@ -495,6 +498,11 @@ export function TestForm({ flavors }: { flavors: HumorFlavor[] }) {
             </div>
           ) : result && result.ok ? (
             <div className="space-y-5">
+              {result.fallbackNotice ? (
+                <div className="rounded-xl border border-amber-300/50 bg-amber-100/60 px-4 py-3 text-sm text-amber-900 dark:border-amber-500/40 dark:bg-amber-900/30 dark:text-amber-100">
+                  {result.fallbackNotice}
+                </div>
+              ) : null}
               <div className="flex flex-wrap gap-4">
                 {selectedFlavor ? (
                   <div className="inline-flex flex-col rounded-xl border border-border bg-muted/25 px-4 py-3">
