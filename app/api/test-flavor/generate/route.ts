@@ -5,6 +5,7 @@ import {
   needsAlmostCrackdJsonReconcile,
   reconcileAlmostCrackdJsonPromptsForFlavor,
 } from "@/lib/db/steps";
+import { almostcrackdMessageLooksLikeInvalidJsonError } from "@/lib/api/almostcrackd-pipeline";
 import { getCurrentUserId } from "@/lib/supabase/current-user";
 import { runAssignment5TestFlavorCaptions } from "@/lib/test-flavor-captions";
 
@@ -145,10 +146,36 @@ export async function POST(request: Request) {
     }
 
     if (!result.ok) {
-      return Response.json(
-        { error: result.error },
-        { status: result.status }
-      );
+      // If AlmostCrackd rejects non-JSON output, force-reconcile final step prompts and retry once.
+      if (almostcrackdMessageLooksLikeInvalidJsonError(result.error)) {
+        const { error: recErr } =
+          await reconcileAlmostCrackdJsonPromptsForFlavor(humorFlavorId, userId);
+        if (!recErr) {
+          if (contentTypeHdr.includes("multipart/form-data") && multipartFile) {
+            const buffer = Buffer.from(await multipartFile.arrayBuffer());
+            result = await runAssignment5TestFlavorCaptions({
+              accessToken,
+              humorFlavorId,
+              imageFile: {
+                buffer,
+                contentType: multipartFile.type?.trim()
+                  ? multipartFile.type
+                  : "application/octet-stream",
+              },
+            });
+          } else {
+            result = await runAssignment5TestFlavorCaptions({
+              accessToken,
+              humorFlavorId,
+              imageUrl,
+            });
+          }
+        }
+      }
+    }
+
+    if (!result.ok) {
+      return Response.json({ error: result.error }, { status: result.status });
     }
 
     return Response.json({
