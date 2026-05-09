@@ -32,9 +32,15 @@ type GenResult =
   | { ok: true; captions: string[] }
   | { ok: false; error: string };
 
+function safeText(value: unknown): string {
+  if (typeof value === "string") return value;
+  if (value == null) return "";
+  return String(value);
+}
+
 function flavorDisplayLabel(f: HumorFlavor): string {
-  const n = f.name?.trim();
-  return n && n.length > 0 ? n : f.id;
+  const n = safeText(f.name).trim();
+  return n.length > 0 ? n : safeText(f.id);
 }
 
 const FLAVOR_LISTBOX_ID = "test-flavor-listbox";
@@ -65,7 +71,7 @@ export function TestForm({ flavors }: { flavors: HumorFlavor[] }) {
     if (!q) return sortedFlavors;
     return sortedFlavors.filter((f) => {
       const label = flavorDisplayLabel(f).toLowerCase();
-      return label.includes(q) || f.id.toLowerCase().includes(q);
+      return label.includes(q) || safeText(f.id).toLowerCase().includes(q);
     });
   }, [sortedFlavors, flavorQuery]);
 
@@ -99,7 +105,7 @@ export function TestForm({ flavors }: { flavors: HumorFlavor[] }) {
   }, [filePreviewUrl]);
 
   const selectedFlavor =
-    flavors.find((f) => f.id === selectedFlavorId) ?? null;
+    flavors.find((f) => safeText(f.id) === selectedFlavorId) ?? null;
 
   const previewSrc = filePreviewUrl ?? imageUrl.trim();
 
@@ -114,7 +120,7 @@ export function TestForm({ flavors }: { flavors: HumorFlavor[] }) {
   }
 
   function commitFlavorPick(f: HumorFlavor) {
-    setSelectedFlavorId(f.id);
+    setSelectedFlavorId(safeText(f.id));
     setFlavorQuery(flavorDisplayLabel(f));
     setFlavorQueryOpen(false);
   }
