@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { HumorFlavor } from "@/lib/db/flavors";
 import { captionsFromRecords } from "@/lib/api/almostcrackd-pipeline";
 
@@ -32,6 +32,13 @@ type GenResult =
   | { ok: true; captions: string[] }
   | { ok: false; error: string };
 
+function flavorDisplayLabel(f: HumorFlavor): string {
+  const n = f.name?.trim();
+  return n && n.length > 0 ? n : f.id;
+}
+
+const FLAVOR_LISTBOX_ID = "test-flavor-listbox";
+
 export function TestForm({ flavors }: { flavors: HumorFlavor[] }) {
   const [pending, setPending] = useState(false);
   const [result, setResult] = useState<GenResult | null>(null);
@@ -39,6 +46,46 @@ export function TestForm({ flavors }: { flavors: HumorFlavor[] }) {
   const [imageUrl, setImageUrl] = useState(SAMPLE_IMAGE_URL);
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [copiedIndex, setCopiedIndex] = useState<number | null>(null);
+
+  const [flavorQueryOpen, setFlavorQueryOpen] = useState(false);
+  const [flavorQuery, setFlavorQuery] = useState("");
+  const [flavorHighlight, setFlavorHighlight] = useState(0);
+  const flavorComboRef = useRef<HTMLDivElement>(null);
+
+  const sortedFlavors = useMemo(() => {
+    return [...flavors].sort((a, b) =>
+      flavorDisplayLabel(a).localeCompare(flavorDisplayLabel(b), undefined, {
+        sensitivity: "base",
+      }),
+    );
+  }, [flavors]);
+
+  const filteredFlavors = useMemo(() => {
+    const q = flavorQuery.trim().toLowerCase();
+    if (!q) return sortedFlavors;
+    return sortedFlavors.filter((f) => {
+      const label = flavorDisplayLabel(f).toLowerCase();
+      return label.includes(q) || f.id.toLowerCase().includes(q);
+    });
+  }, [sortedFlavors, flavorQuery]);
+
+  const flavorHighlightBounded =
+    filteredFlavors.length === 0
+      ? 0
+      : Math.min(flavorHighlight, filteredFlavors.length - 1);
+
+  useEffect(() => {
+    function onPointerDown(ev: PointerEvent) {
+      if (
+        flavorComboRef.current &&
+        !flavorComboRef.current.contains(ev.target as Node)
+      ) {
+        setFlavorQueryOpen(false);
+      }
+    }
+    document.addEventListener("pointerdown", onPointerDown);
+    return () => document.removeEventListener("pointerdown", onPointerDown);
+  }, []);
 
   const filePreviewUrl = useMemo(() => {
     if (!imageFile) return null;
@@ -64,6 +111,12 @@ export function TestForm({ flavors }: { flavors: HumorFlavor[] }) {
     } catch {
       setCopiedIndex(null);
     }
+  }
+
+  function commitFlavorPick(f: HumorFlavor) {
+    setSelectedFlavorId(f.id);
+    setFlavorQuery(flavorDisplayLabel(f));
+    setFlavorQueryOpen(false);
   }
 
   async function handleSubmit(e: React.FormEvent) {
@@ -154,28 +207,123 @@ export function TestForm({ flavors }: { flavors: HumorFlavor[] }) {
         </div>
 
         <form onSubmit={handleSubmit} className="relative space-y-5">
-          <div>
+          <div ref={flavorComboRef}>
             <label
-              htmlFor="flavor_id"
+              htmlFor="flavor_query"
               className="mb-2 block text-xs font-medium uppercase tracking-wide text-muted-foreground"
             >
               Humor flavor
             </label>
-            <select
-              id="flavor_id"
-              name="flavor_id"
-              required
-              value={selectedFlavorId}
-              onChange={(e) => setSelectedFlavorId(e.target.value)}
-              className="input-base w-full border-muted bg-background shadow-inner"
-            >
-              <option value="">Select a flavor</option>
-              {flavors.map((f) => (
-                <option key={f.id} value={f.id}>
-                  {f.name ?? f.id}
-                </option>
-              ))}
-            </select>
+            <p className="mb-2 text-[0.8125rem] text-muted-foreground">
+              Search by name or paste a flavor id, then choose a row below.
+            </p>
+            <div className="relative">
+              <input
+                id="flavor_query"
+                type="text"
+                name="flavor_query"
+                role="combobox"
+                aria-autocomplete="list"
+                aria-controls={FLAVOR_LISTBOX_ID}
+                aria-expanded={flavorQueryOpen}
+                autoComplete="off"
+                value={flavorQuery}
+                onChange={(e) => {
+                  setFlavorHighlight(0);
+                  setFlavorQuery(e.target.value);
+                  setSelectedFlavorId("");
+                  setFlavorQueryOpen(true);
+                }}
+                onFocus={() => setFlavorQueryOpen(true)}
+                onKeyDown={(e) => {
+                  if (!flavorQueryOpen && (e.key === "ArrowDown" || e.key === "Enter")) {
+                    setFlavorQueryOpen(true);
+                  }
+                  if (!flavorQueryOpen) return;
+                  if (e.key === "Escape") {
+                    e.preventDefault();
+                    setFlavorQueryOpen(false);
+                    return;
+                  }
+                  const n = filteredFlavors.length;
+                  if (n === 0) return;
+                  if (e.key === "ArrowDown") {
+                    e.preventDefault();
+                    setFlavorHighlight((prev) => {
+                      const start = Math.min(prev, n - 1);
+                      return (start + 1) % n;
+                    });
+                  } else if (e.key === "ArrowUp") {
+                    e.preventDefault();
+                    setFlavorHighlight((prev) => {
+                      const start = Math.min(prev, n - 1);
+                      return (start - 1 + n) % n;
+                    });
+                  } else if (e.key === "Enter") {
+                    const f = filteredFlavors[flavorHighlightBounded];
+                    if (f) {
+                      e.preventDefault();
+                      commitFlavorPick(f);
+                    }
+                  }
+                }}
+                placeholder="Type to filter flavors…"
+                className="input-base w-full border-muted bg-background shadow-inner"
+              />
+              {flavorQueryOpen ? (
+                <ul
+                  id={FLAVOR_LISTBOX_ID}
+                  role="listbox"
+                  aria-label="Matching humor flavors"
+                  className="absolute z-40 mt-1 max-h-[min(16rem,calc(100vh-12rem))] w-full overflow-y-auto rounded-xl border border-border bg-card shadow-lg ring-1 ring-black/[0.06] dark:ring-white/[0.08]"
+                >
+                  {filteredFlavors.length === 0 ? (
+                    <li className="px-3 py-8 text-center text-sm text-muted-foreground">
+                      No flavors match{" "}
+                      <span className="font-medium text-foreground">
+                        &ldquo;{flavorQuery.trim() || "(empty)"}&rdquo;
+                      </span>
+                    </li>
+                  ) : (
+                    filteredFlavors.map((f, i) => (
+                      <li key={f.id} role="presentation">
+                        <button
+                          type="button"
+                          role="option"
+                          aria-selected={i === flavorHighlightBounded}
+                          className={
+                            i === flavorHighlightBounded
+                              ? "flex w-full flex-col items-start gap-0.5 bg-muted/70 px-3 py-2.5 text-left text-sm hover:bg-muted/70"
+                              : "flex w-full flex-col items-start gap-0.5 px-3 py-2.5 text-left text-sm hover:bg-muted/50"
+                          }
+                          onMouseEnter={() => setFlavorHighlight(i)}
+                          onMouseDown={(ev) => {
+                            ev.preventDefault();
+                            commitFlavorPick(f);
+                          }}
+                        >
+                          <span className="font-medium text-card-foreground">
+                            {flavorDisplayLabel(f)}
+                          </span>
+                          <span className="font-mono text-[0.7rem] text-muted-foreground">
+                            {f.id}
+                          </span>
+                        </button>
+                      </li>
+                    ))
+                  )}
+                </ul>
+              ) : null}
+              <input type="hidden" name="humorFlavorId" value={selectedFlavorId} />
+              {selectedFlavorId ? (
+                <p className="mt-1.5 font-mono text-[0.7rem] text-muted-foreground">
+                  Selected id:{" "}
+                  <span className="text-emerald-600 dark:text-emerald-400">
+                    {selectedFlavorId}
+                  </span>
+                </p>
+              ) : null}
+            </div>
           </div>
 
           <div>
