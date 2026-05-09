@@ -5,19 +5,17 @@ export const ALMOSTCRACKD_INTERMEDIATE_STEP_SYSTEM_PROMPT =
   "You are part of a multi-step humor caption pipeline. Follow the user prompt. This step is not the final step: do not output the final JSON array of captions here.";
 
 export const ALMOSTCRACKD_INTERMEDIATE_STEP_USER_PROMPT =
-  "Refine humor or caption ideas for this flavor from the image context. Produce intermediate text for the next step only—do not return the final JSON array of five captions; the last pipeline step emits that JSON.";
+  "Refine humor or caption ideas for this flavor from the image context. Think about the image internally, but do not output analysis. Produce intermediate text for the next step only—do not return the final JSON array of five captions; the last pipeline step emits that JSON.";
 
 /** Final step: AlmostCrackd expects parseable JSON (array of 5 caption strings). */
 export const ALMOSTCRACKD_FINAL_STEP_SYSTEM_PROMPT =
   "You are a caption generator. Your final response must be parseable JSON only.";
 
-export const ALMOSTCRACKD_FINAL_STEP_USER_PROMPT = `Return ONLY valid JSON. Do not include markdown, explanations, numbering, or extra text. The JSON must be an array of 5 strings, where each string is one caption.
-
-Example:
-["caption one", "caption two", "caption three", "caption four", "caption five"]`;
+export const ALMOSTCRACKD_FINAL_STEP_USER_PROMPT =
+  "Return ONLY a raw JSON array of exactly five caption strings. No analysis. No explanation. No markdown. No labels. No object wrapper. No text before or after the JSON array. The first character must be [ and the last character must be ].";
 
 export const ALMOSTCRACKD_REQUIRED_JSON_ENDING =
-  "Return ONLY valid JSON. The response must be exactly one JSON array of five strings. The first character must be [ and the last character must be ].";
+  "Return ONLY a raw JSON array of exactly five caption strings. No analysis. No explanation. No markdown. No labels. No object wrapper. No text before or after the JSON array. The first character must be [ and the last character must be ].";
 
 /**
  * AlmostCrackd returns 502 if any step has a missing/null/empty `llm_system_prompt`.
@@ -155,10 +153,8 @@ export async function reconcileAlmostCrackdJsonPromptsForFlavor(
 
 function strictFinalPromptForRetryLevel(level: number): string {
   const base = [
-    "Return ONLY valid JSON.",
-    "Do not include markdown, explanations, numbering, or extra text.",
-    "The JSON must be an array of 5 strings, where each string is one caption.",
     ALMOSTCRACKD_REQUIRED_JSON_ENDING,
+    "Think about the image internally, but do not output analysis.",
   ];
   if (level >= 2) {
     base.push(
@@ -205,6 +201,50 @@ export async function applyAlmostCrackdFinalPromptStrictnessForRetry(
   return { error: null, prompt };
 }
 
+function sanitizeIntermediatePrompt(prompt: string): string {
+  const cleaned = prompt
+    .replace(/\bdescribe\b/gi, "think internally about")
+    .replace(/\banaly[sz]e\b/gi, "reason internally about")
+    .replace(/\bexplain\b/gi, "reason internally about");
+  if (
+    cleaned.toLowerCase().includes("think about the image internally, but do not output analysis")
+  ) {
+    return cleaned;
+  }
+  return `${cleaned}\nThink about the image internally, but do not output analysis.`;
+}
+
+export async function sanitizeAlmostCrackdIntermediatePromptsForFlavor(
+  flavorId: string,
+  userId: string
+): Promise<{ error: { message: string } | null }> {
+  const supabase = createAdminClient();
+  const { data: steps, error: listErr } = await listStepsForFlavor(flavorId);
+  if (listErr) return { error: listErr };
+  if (!steps?.length) return { error: null };
+
+  const sorted = [...steps].sort((a, b) => {
+    const ao = Number(a.order_by ?? 0);
+    const bo = Number(b.order_by ?? 0);
+    if (ao !== bo) return ao - bo;
+    return String(a.id).localeCompare(String(b.id));
+  });
+
+  for (let i = 0; i < sorted.length - 1; i++) {
+    const step = sorted[i]!;
+    const current = (step.llm_user_prompt ?? "").trim();
+    if (!current) continue;
+    const next = sanitizeIntermediatePrompt(current);
+    if (next === current) continue;
+    const { error } = await supabase
+      .from("humor_flavor_steps")
+      .update({ llm_user_prompt: next, modified_by_user_id: userId })
+      .eq("id", step.id);
+    if (error) return { error };
+  }
+  return { error: null };
+}
+
 /** True if the last step (by order) is not already on the AlmostCrackd JSON caption template. */
 export function needsAlmostCrackdJsonReconcile(steps: HumorFlavorStep[]): boolean {
   if (!steps.length) return false;
@@ -218,7 +258,7 @@ export function needsAlmostCrackdJsonReconcile(steps: HumorFlavorStep[]): boolea
   const u = (last.llm_user_prompt ?? "").trim();
   const s = (last.llm_system_prompt ?? "").trim();
   const matchesContract =
-    u.startsWith("Return ONLY valid JSON") &&
+    u.includes(ALMOSTCRACKD_REQUIRED_JSON_ENDING) &&
     s === ALMOSTCRACKD_FINAL_STEP_SYSTEM_PROMPT.trim();
   return !matchesContract;
 }

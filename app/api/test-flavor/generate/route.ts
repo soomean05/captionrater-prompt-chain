@@ -6,11 +6,13 @@ import {
   listStepsForFlavor,
   needsAlmostCrackdJsonReconcile,
   reconcileAlmostCrackdJsonPromptsForFlavor,
+  sanitizeAlmostCrackdIntermediatePromptsForFlavor,
 } from "@/lib/db/steps";
 import { almostcrackdMessageLooksLikeInvalidJsonError } from "@/lib/api/almostcrackd-pipeline";
 import { getCurrentUserId } from "@/lib/supabase/current-user";
 import { runAssignment5TestFlavorCaptions } from "@/lib/test-flavor-captions";
 import { getFlavor } from "@/lib/db/flavors";
+import { generateCaptionsViaOpenAI } from "@/lib/api/openai-captions";
 
 function captionBackendOk(): boolean {
   const v = process.env.CAPTION_BACKEND?.trim().toLowerCase();
@@ -107,6 +109,14 @@ export async function POST(request: Request) {
             backfillError.message ??
             "Could not ensure system prompts on flavor steps.",
         },
+        { status: 500 }
+      );
+    }
+    const { error: sanitizeErr } =
+      await sanitizeAlmostCrackdIntermediatePromptsForFlavor(humorFlavorId, userId);
+    if (sanitizeErr) {
+      return Response.json(
+        { error: sanitizeErr.message ?? "Could not sanitize intermediate prompts." },
         { status: 500 }
       );
     }
@@ -230,6 +240,26 @@ export async function POST(request: Request) {
     }
 
     if (!result.ok) {
+      if (
+        process.env.CAPTION_FALLBACK_OPENAI === "1" &&
+        almostcrackdMessageLooksLikeInvalidJsonError(result.error)
+      ) {
+        const fallback = await generateCaptionsViaOpenAI({
+          imageUrl,
+          imageFile: imageFilePayload ?? undefined,
+        });
+        if (fallback.ok) {
+          return Response.json({ ok: true, captions: fallback.captions, fallback: "openai" });
+        }
+        return Response.json(
+          {
+            error: `${result.error}\nOpenAI fallback also failed: ${fallback.error}`,
+            rawAlmostCrackdResponse: result.rawAlmostCrackdResponse ?? null,
+            rawOpenAiResponse: fallback.rawOpenAiResponse ?? null,
+          },
+          { status: result.status }
+        );
+      }
       return Response.json(
         {
           error: result.error,

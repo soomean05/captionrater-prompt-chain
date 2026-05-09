@@ -30,7 +30,12 @@ function IconCopy(props: React.SVGProps<SVGSVGElement>) {
 
 type GenResult =
   | { ok: true; captions: string[] }
-  | { ok: false; error: string; rawAlmostCrackdResponse?: string };
+  | {
+      ok: false;
+      error: string;
+      rawAlmostCrackdResponse?: string;
+      rawOpenAiResponse?: string;
+    };
 
 function safeText(value: unknown): string {
   if (typeof value === "string") return value;
@@ -161,6 +166,7 @@ export function TestForm({ flavors }: { flavors: HumorFlavor[] }) {
         captions?: unknown[];
         error?: string;
         rawAlmostCrackdResponse?: unknown;
+        rawOpenAiResponse?: unknown;
       };
       try {
         data = (await res.json()) as typeof data;
@@ -183,6 +189,10 @@ export function TestForm({ flavors }: { flavors: HumorFlavor[] }) {
           rawAlmostCrackdResponse:
             typeof data.rawAlmostCrackdResponse === "string"
               ? data.rawAlmostCrackdResponse
+              : undefined,
+          rawOpenAiResponse:
+            typeof data.rawOpenAiResponse === "string"
+              ? data.rawOpenAiResponse
               : undefined,
         });
         setPending(false);
@@ -469,6 +479,16 @@ export function TestForm({ flavors }: { flavors: HumorFlavor[] }) {
                   </p>
                   <pre className="max-h-48 overflow-auto whitespace-pre-wrap break-words rounded-md bg-muted/40 p-2 text-xs text-foreground">
                     {result.rawAlmostCrackdResponse}
+                  </pre>
+                </div>
+              ) : null}
+              {result.rawOpenAiResponse ? (
+                <div className="mt-3 rounded-lg border border-border/60 bg-background/70 p-3">
+                  <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                    Raw OpenAI fallback response
+                  </p>
+                  <pre className="max-h-48 overflow-auto whitespace-pre-wrap break-words rounded-md bg-muted/40 p-2 text-xs text-foreground">
+                    {result.rawOpenAiResponse}
                   </pre>
                 </div>
               ) : null}

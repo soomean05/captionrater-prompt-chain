@@ -492,6 +492,21 @@ export async function requestGenerateCaptions(
     humorFlavorId: humorFlavorIdForAlmostCrackd(params.humorFlavorId),
   };
 
+  if (process.env.ALMOSTCRACKD_FORCE_RESPONSE_FORMAT === "1") {
+    generatePayload.response_format = {
+      type: "json_schema",
+      json_schema: {
+        name: "captions_array",
+        schema: {
+          type: "array",
+          minItems: 5,
+          maxItems: 5,
+          items: { type: "string" },
+        },
+      },
+    };
+  }
+
   if (!generatePayload.imageId) {
     throw new Error("Missing imageId before generate-captions.");
   }
