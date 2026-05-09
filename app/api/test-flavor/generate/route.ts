@@ -1,5 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import {
+  ALMOSTCRACKD_REQUIRED_JSON_ENDING,
+  applyAlmostCrackdFinalPromptStrictnessForRetry,
   backfillEmptySystemPromptsForFlavor,
   listStepsForFlavor,
   needsAlmostCrackdJsonReconcile,
@@ -8,6 +10,7 @@ import {
 import { almostcrackdMessageLooksLikeInvalidJsonError } from "@/lib/api/almostcrackd-pipeline";
 import { getCurrentUserId } from "@/lib/supabase/current-user";
 import { runAssignment5TestFlavorCaptions } from "@/lib/test-flavor-captions";
+import { getFlavor } from "@/lib/db/flavors";
 
 function captionBackendOk(): boolean {
   const v = process.env.CAPTION_BACKEND?.trim().toLowerCase();
@@ -109,10 +112,14 @@ export async function POST(request: Request) {
     }
 
     const { data: stepsAfterBackfill } = await listStepsForFlavor(humorFlavorId);
-    if (
-      stepsAfterBackfill?.length &&
-      needsAlmostCrackdJsonReconcile(stepsAfterBackfill)
-    ) {
+    const sortedAfterBackfill = [...(stepsAfterBackfill ?? [])].sort((a, b) => {
+      const ao = Number(a.order_by ?? 0);
+      const bo = Number(b.order_by ?? 0);
+      if (ao !== bo) return ao - bo;
+      return String(a.id).localeCompare(String(b.id));
+    });
+
+    if (sortedAfterBackfill.length && needsAlmostCrackdJsonReconcile(sortedAfterBackfill)) {
       const { error: recErr } =
         await reconcileAlmostCrackdJsonPromptsForFlavor(humorFlavorId, userId);
       if (recErr) {
@@ -122,6 +129,37 @@ export async function POST(request: Request) {
         );
       }
     }
+
+    const { data: flavorInfo } = await getFlavor(humorFlavorId);
+    const { data: stepsForDebug } = await listStepsForFlavor(humorFlavorId);
+    const sortedForDebug = [...(stepsForDebug ?? [])].sort((a, b) => {
+      const ao = Number(a.order_by ?? 0);
+      const bo = Number(b.order_by ?? 0);
+      if (ao !== bo) return ao - bo;
+      return String(a.id).localeCompare(String(b.id));
+    });
+    const finalStepAfterReconcile =
+      sortedForDebug.length > 0 ? sortedForDebug[sortedForDebug.length - 1]! : null;
+    const finalPromptText = (finalStepAfterReconcile?.llm_user_prompt ?? "").trim();
+    console.log(
+      "[AlmostCrackd Debug] request context",
+      JSON.stringify({
+        selectedHumorFlavorId: humorFlavorId,
+        selectedHumorFlavorName: flavorInfo?.name ?? null,
+        orderedFlavorSteps: sortedForDebug.map((s, idx) => ({
+          idx,
+          id: s.id,
+          order_by: s.order_by,
+          systemPrompt: s.llm_system_prompt ?? "",
+          userPrompt: s.llm_user_prompt ?? "",
+        })),
+        finalPromptText,
+        jsonOnlyInstructionIsLast: finalPromptText.endsWith(
+          ALMOSTCRACKD_REQUIRED_JSON_ENDING
+        ),
+        requiredEnding: ALMOSTCRACKD_REQUIRED_JSON_ENDING,
+      })
+    );
 
     const imageFilePayload =
       contentTypeHdr.includes("multipart/form-data") && multipartFile
@@ -153,34 +191,52 @@ export async function POST(request: Request) {
     if (!result.ok) {
       // If AlmostCrackd rejects non-JSON output, force-reconcile final step prompts and retry once.
       if (almostcrackdMessageLooksLikeInvalidJsonError(result.error)) {
-        const { error: recErr } =
-          await reconcileAlmostCrackdJsonPromptsForFlavor(humorFlavorId, userId);
-        if (recErr) {
-          return Response.json(
-            {
-              error:
-                recErr.message ??
-                "Could not align step prompts for AlmostCrackd after JSON parse failure.",
-            },
-            { status: 500 }
+        for (let retryLevel = 1; retryLevel <= 3; retryLevel++) {
+          const strict = await applyAlmostCrackdFinalPromptStrictnessForRetry(
+            humorFlavorId,
+            userId,
+            retryLevel
           );
-        }
-
-        // Give prompt update a moment to propagate, then retry up to 2 times.
-        await new Promise((r) => setTimeout(r, 250));
-        result = await runGenerateAttempt();
-        if (
-          !result.ok &&
-          almostcrackdMessageLooksLikeInvalidJsonError(result.error)
-        ) {
-          await new Promise((r) => setTimeout(r, 500));
+          if (strict.error) {
+            return Response.json(
+              {
+                error:
+                  strict.error.message ??
+                  "Could not align step prompts for AlmostCrackd after JSON parse failure.",
+              },
+              { status: 500 }
+            );
+          }
+          console.log(
+            "[AlmostCrackd Debug] strict retry prompt",
+            JSON.stringify({
+              retryLevel,
+              finalPromptText: strict.prompt ?? "",
+              jsonOnlyInstructionIsLast: (strict.prompt ?? "").trim().endsWith(
+                ALMOSTCRACKD_REQUIRED_JSON_ENDING
+              ),
+            })
+          );
+          await new Promise((r) => setTimeout(r, 200 * retryLevel));
           result = await runGenerateAttempt();
+          if (
+            result.ok ||
+            !almostcrackdMessageLooksLikeInvalidJsonError(result.error)
+          ) {
+            break;
+          }
         }
       }
     }
 
     if (!result.ok) {
-      return Response.json({ error: result.error }, { status: result.status });
+      return Response.json(
+        {
+          error: result.error,
+          rawAlmostCrackdResponse: result.rawAlmostCrackdResponse ?? null,
+        },
+        { status: result.status }
+      );
     }
 
     return Response.json({

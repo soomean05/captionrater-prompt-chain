@@ -1,5 +1,10 @@
 import { getFlavor } from "@/lib/db/flavors";
 import {
+  ALMOSTCRACKD_REQUIRED_JSON_ENDING,
+  listStepsForFlavor,
+  type HumorFlavorStep,
+} from "@/lib/db/steps";
+import {
   almostcrackdMessageLooksLikeInvalidJsonError,
   extractCaptions,
   generatePresignedUrl,
@@ -37,6 +42,22 @@ function failureMessage(f: PipelinePostFailure): string {
   return f.message;
 }
 
+function orderedSteps(steps: HumorFlavorStep[]): HumorFlavorStep[] {
+  return [...steps].sort((a, b) => {
+    const ao = Number(a.order_by ?? 0);
+    const bo = Number(b.order_by ?? 0);
+    if (ao !== bo) return ao - bo;
+    return String(a.id).localeCompare(String(b.id));
+  });
+}
+
+function lastStepLooksJsonOnly(steps: HumorFlavorStep[]): boolean {
+  if (!steps.length) return false;
+  const last = orderedSteps(steps)[steps.length - 1]!;
+  const finalPrompt = (last.llm_user_prompt ?? "").trim();
+  return finalPrompt.endsWith(ALMOSTCRACKD_REQUIRED_JSON_ENDING);
+}
+
 function augmentAlmostCrackdJsonParseError(message: string): string {
   if (!almostcrackdMessageLooksLikeInvalidJsonError(message)) return message;
   return "AlmostCrackd returned non-JSON text for caption generation multiple times. This can be transient; please retry once.";
@@ -72,7 +93,7 @@ export async function runAssignment5TestFlavorCaptions(input: {
   imageFile?: { buffer: Buffer; contentType: string };
 }): Promise<
   | { ok: true; captions: string[] }
-  | { ok: false; error: string; status: number }
+  | { ok: false; error: string; status: number; rawAlmostCrackdResponse?: string }
 > {
   const humorFlavorId = input.humorFlavorId.trim();
   if (!humorFlavorId) {
@@ -89,6 +110,27 @@ export async function runAssignment5TestFlavorCaptions(input: {
   if (flavorError || !flavor) {
     return { ok: false, error: "Flavor not found", status: 404 };
   }
+
+  const { data: stepRows } = await listStepsForFlavor(humorFlavorId);
+  const ordered = orderedSteps(stepRows ?? []);
+  const finalStep = ordered.length ? ordered[ordered.length - 1]! : null;
+  console.log(
+    "[AlmostCrackd Debug] pre-generate context",
+    JSON.stringify({
+      humorFlavorId: flavor.id,
+      humorFlavorName: flavor.name ?? null,
+      orderedFlavorSteps: ordered.map((s, idx) => ({
+        idx,
+        id: s.id,
+        order_by: s.order_by,
+        systemPrompt: s.llm_system_prompt ?? "",
+        userPrompt: s.llm_user_prompt ?? "",
+      })),
+      finalPromptText: finalStep?.llm_user_prompt ?? "",
+      jsonOnlyInstructionIsLast: lastStepLooksJsonOnly(ordered),
+      requiredEnding: ALMOSTCRACKD_REQUIRED_JSON_ENDING,
+    })
+  );
 
   let registerImageUrlForPipeline: string;
 
@@ -235,6 +277,7 @@ export async function runAssignment5TestFlavorCaptions(input: {
         ok: false,
         error: augmentAlmostCrackdJsonParseError(failureMessage(firstFail)),
         status: 502,
+        rawAlmostCrackdResponse: firstFail.rawBody,
       };
     }
     throw new Error(

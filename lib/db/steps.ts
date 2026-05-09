@@ -16,6 +16,9 @@ export const ALMOSTCRACKD_FINAL_STEP_USER_PROMPT = `Return ONLY valid JSON. Do n
 Example:
 ["caption one", "caption two", "caption three", "caption four", "caption five"]`;
 
+export const ALMOSTCRACKD_REQUIRED_JSON_ENDING =
+  "Return ONLY valid JSON. The response must be exactly one JSON array of five strings. The first character must be [ and the last character must be ].";
+
 /**
  * AlmostCrackd returns 502 if any step has a missing/null/empty `llm_system_prompt`.
  * Backfill uses the intermediate system prompt until `reconcileAlmostCrackdJsonPromptsForFlavor` runs.
@@ -148,6 +151,58 @@ export async function reconcileAlmostCrackdJsonPromptsForFlavor(
     }
   }
   return { error: null };
+}
+
+function strictFinalPromptForRetryLevel(level: number): string {
+  const base = [
+    "Return ONLY valid JSON.",
+    "Do not include markdown, explanations, numbering, or extra text.",
+    "The JSON must be an array of 5 strings, where each string is one caption.",
+    ALMOSTCRACKD_REQUIRED_JSON_ENDING,
+  ];
+  if (level >= 2) {
+    base.push(
+      "Output JSON only. If you add any extra character outside the JSON array, the answer is invalid."
+    );
+  }
+  if (level >= 3) {
+    base.push(
+      'Do not write prefixes like "Analysis", "Sure", or code fences. Start immediately with [ and end immediately with ].'
+    );
+  }
+  return base.join("\n");
+}
+
+export async function applyAlmostCrackdFinalPromptStrictnessForRetry(
+  flavorId: string,
+  userId: string,
+  retryLevel: number
+): Promise<{ error: { message: string } | null; prompt: string | null }> {
+  const supabase = createAdminClient();
+  const { data: steps, error: listErr } = await listStepsForFlavor(flavorId);
+  if (listErr) return { error: listErr, prompt: null };
+  if (!steps?.length) return { error: { message: "No steps for flavor." }, prompt: null };
+
+  const sorted = [...steps].sort((a, b) => {
+    const ao = Number(a.order_by ?? 0);
+    const bo = Number(b.order_by ?? 0);
+    if (ao !== bo) return ao - bo;
+    return String(a.id).localeCompare(String(b.id));
+  });
+  const last = sorted[sorted.length - 1]!;
+  const prompt = strictFinalPromptForRetryLevel(retryLevel);
+
+  const { error } = await supabase
+    .from("humor_flavor_steps")
+    .update({
+      llm_user_prompt: prompt,
+      llm_system_prompt: ALMOSTCRACKD_FINAL_STEP_SYSTEM_PROMPT,
+      modified_by_user_id: userId,
+    })
+    .eq("id", last.id);
+  if (error) return { error, prompt: null };
+
+  return { error: null, prompt };
 }
 
 /** True if the last step (by order) is not already on the AlmostCrackd JSON caption template. */

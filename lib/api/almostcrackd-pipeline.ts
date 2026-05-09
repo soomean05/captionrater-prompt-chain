@@ -35,6 +35,7 @@ export type PipelinePostFailure = {
   status: number;
   endpoint: string;
   message: string;
+  rawBody?: string;
 };
 
 export type PipelinePostSuccess<T> = { ok: true; data: T };
@@ -72,6 +73,7 @@ async function finalizeAlmostCrackdFetch(
       status: 405,
       endpoint,
       message: `AlmostCrackd returned 405 METHOD NOT ALLOWED at: ${endpoint}`,
+      rawBody: text,
     };
   }
 
@@ -93,6 +95,7 @@ async function finalizeAlmostCrackdFetch(
       status: res.status,
       endpoint,
       message: `AlmostCrackd error ${res.status} at ${endpoint}: ${msg}`,
+      rawBody: text,
     };
   }
 
@@ -102,6 +105,7 @@ async function finalizeAlmostCrackdFetch(
       status: res.status,
       endpoint,
       message: `AlmostCrackd returned ${res.status} with non-JSON body at ${endpoint}: ${text.trim().slice(0, 400)}`,
+      rawBody: text,
     };
   }
 
@@ -503,6 +507,10 @@ export async function requestGenerateCaptions(
   if (process.env.DEBUG_ALMOSTCRACKD === "1") {
     console.log("FINAL generate-captions payload:", generatePayload);
   }
+  console.log(
+    "[AlmostCrackd Debug] /pipeline/generate-captions request body",
+    JSON.stringify(generatePayload)
+  );
 
   const bodyJson = JSON.stringify(generatePayload);
   const parsedRetries = Number.parseInt(

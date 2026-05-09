@@ -30,7 +30,7 @@ function IconCopy(props: React.SVGProps<SVGSVGElement>) {
 
 type GenResult =
   | { ok: true; captions: string[] }
-  | { ok: false; error: string };
+  | { ok: false; error: string; rawAlmostCrackdResponse?: string };
 
 function safeText(value: unknown): string {
   if (typeof value === "string") return value;
@@ -156,7 +156,12 @@ export function TestForm({ flavors }: { flavors: HumorFlavor[] }) {
           }),
         });
       }
-      let data: { ok?: boolean; captions?: unknown[]; error?: string };
+      let data: {
+        ok?: boolean;
+        captions?: unknown[];
+        error?: string;
+        rawAlmostCrackdResponse?: unknown;
+      };
       try {
         data = (await res.json()) as typeof data;
       } catch {
@@ -175,6 +180,10 @@ export function TestForm({ flavors }: { flavors: HumorFlavor[] }) {
             typeof data.error === "string"
               ? data.error
               : `Request failed (${res.status})`,
+          rawAlmostCrackdResponse:
+            typeof data.rawAlmostCrackdResponse === "string"
+              ? data.rawAlmostCrackdResponse
+              : undefined,
         });
         setPending(false);
         return;
@@ -453,6 +462,16 @@ export function TestForm({ flavors }: { flavors: HumorFlavor[] }) {
             <div className="alert-error rounded-xl border px-5 py-4">
               <p className="font-medium">Something went wrong</p>
               <p className="mt-2">{result.error}</p>
+              {result.rawAlmostCrackdResponse ? (
+                <div className="mt-3 rounded-lg border border-border/60 bg-background/70 p-3">
+                  <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                    Raw AlmostCrackd response
+                  </p>
+                  <pre className="max-h-48 overflow-auto whitespace-pre-wrap break-words rounded-md bg-muted/40 p-2 text-xs text-foreground">
+                    {result.rawAlmostCrackdResponse}
+                  </pre>
+                </div>
+              ) : null}
             </div>
           ) : result && result.ok ? (
             <div className="space-y-5">
